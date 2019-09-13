@@ -24,6 +24,11 @@
 #define BOOT_ARGS_SIZE 512
 #define BOOT_EXTRA_ARGS_SIZE 1024
 
+#define VENDOR_BOOT_MAGIC "VNDRBOOT"
+#define VENDOR_BOOT_MAGIC_SIZE 8
+#define VENDOR_BOOT_ARGS_SIZE 2048
+#define VENDOR_BOOT_NAME_SIZE 16
+
 // The bootloader expects the structure of boot_img_hdr with header
 // version 0 to be as follows:
 struct boot_img_hdr_v0 {
@@ -155,6 +160,108 @@ struct boot_img_hdr_v1 : public boot_img_hdr_v0 {
  *    else: jump to kernel_addr
  */
 struct boot_img_hdr_v2 : public boot_img_hdr_v1 {
+    uint32_t dtb_size; /* size in bytes for DTB image */
+    uint64_t dtb_addr; /* physical load address for DTB image */
+} __attribute__((packed));
+
+
+/* When the boot image header has a version of 3, the structure of the boot
+ * image is as follows:
+ *
+ * +---------------------+
+ * | boot header         | 1 page
+ * +---------------------+
+ * | kernel              | m pages
+ * +---------------------+
+ * | ramdisk             | n pages
+ * +---------------------+
+ *
+ * and the structure of the vendor boot image (introduced with version 3) is as
+ * follows:
+ *
+ * +---------------------+
+ * | vendor boot header  | 1 page
+ * +---------------------+
+ * | vendor ramdisk      | o pages
+ * +---------------------+
+ * | dtb                 | p pages
+ * +---------------------+
+
+ * m = (kernel_size + page_size - 1) / page_size
+ * n = (ramdisk_size + page_size - 1) / page_size
+ * o = (vendor_ramdisk_size + page_size - 1) / page_size
+ * p = (dtb_size + page_size - 1) / page_size
+ *
+ * 0. all entities are page_size aligned in flash
+ * 1. kernel, ramdisk, vendor ramdisk, and DTB are required (size != 0)
+ * 2. load the kernel and DTB at the specified physical address (kernel_addr,
+ *    dtb_addr)
+ * 3. load the vendor ramdisk at ramdisk_addr
+ * 4. load the generic ramdisk immediately following the vendor ramdisk in
+ *    memory
+ * 5. prepare tags at tag_addr.  kernel_args[] is appended to the kernel
+ *    commandline in the tags.
+ * 6. r0 = 0, r1 = MACHINE_TYPE, r2 = tags_addr
+ * 7. if the platform has a second stage bootloader jump to it (must be
+ *    contained outside boot and vendor boot partitions), otherwise
+ *    jump to kernel_addr
+ */
+struct boot_img_hdr_v3 {
+    // Must be BOOT_MAGIC.
+    uint8_t magic[BOOT_MAGIC_SIZE];
+
+    uint32_t kernel_size; /* size in bytes */
+    uint32_t ramdisk_size; /* size in bytes */
+
+    // Operating system version and security patch level.
+    // For version "A.B.C" and patch level "Y-M-D":
+    //   (7 bits for each of A, B, C; 7 bits for (Y-2000), 4 bits for M)
+    //   os_version = A[31:25] B[24:18] C[17:11] (Y-2000)[10:4] M[3:0]
+    uint32_t os_version;
+
+#if __cplusplus
+    void SetOsVersion(unsigned major, unsigned minor, unsigned patch) {
+        os_version &= ((1 << 11) - 1);
+        os_version |= (((major & 0x7f) << 25) | ((minor & 0x7f) << 18) | ((patch & 0x7f) << 11));
+    }
+
+    void SetOsPatchLevel(unsigned year, unsigned month) {
+        os_version &= ~((1 << 11) - 1);
+        os_version |= (((year - 2000) & 0x7f) << 4) | ((month & 0xf) << 0);
+    }
+#endif
+
+    uint32_t header_size;
+
+    uint32_t reserved[4];
+
+    // Version of the boot image header.
+    uint32_t header_version;
+
+    uint8_t cmdline[BOOT_ARGS_SIZE + BOOT_EXTRA_ARGS_SIZE];
+} __attribute__((packed));
+
+struct vendor_boot_img_hdr_v3 {
+    // Must be VENDOR_BOOT_MAGIC.
+    uint8_t magic[VENDOR_BOOT_MAGIC_SIZE];
+
+    // Version of the vendor boot image header.
+    uint32_t header_version;
+
+    uint32_t page_size; /* flash page size we assume */
+
+    uint32_t kernel_addr; /* physical load addr */
+    uint32_t ramdisk_addr; /* physical load addr */
+
+    uint32_t vendor_ramdisk_size; /* size in bytes */
+
+    uint8_t cmdline[VENDOR_BOOT_ARGS_SIZE];
+
+    uint32_t tags_addr; /* physical addr for kernel tags */
+    uint8_t name[VENDOR_BOOT_NAME_SIZE]; /* asciiz product name */
+
+    uint32_t header_size;
+
     uint32_t dtb_size; /* size in bytes for DTB image */
     uint64_t dtb_addr; /* physical load address for DTB image */
 } __attribute__((packed));
