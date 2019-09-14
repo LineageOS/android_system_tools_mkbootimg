@@ -61,13 +61,55 @@ def get_recovery_dtbo_offset(args):
     return dtbo_offset
 
 
+def write_header_v3(args):
+    BOOT_IMAGE_HEADER_V3_SIZE = 1596
+    BOOT_MAGIC = 'ANDROID!'.encode()
+
+    args.output.write(pack('8s', BOOT_MAGIC))
+    args.output.write(pack('4I',
+        filesize(args.kernel),                          # kernel size in bytes
+        filesize(args.ramdisk),                         # ramdisk size in bytes
+        (args.os_version << 11) | args.os_patch_level,  # os version and patch level
+        BOOT_IMAGE_HEADER_V3_SIZE))
+
+    args.output.write(pack('4I', 0, 0, 0, 0))           # reserved
+
+    args.output.write(pack('I', args.header_version))   # version of bootimage header
+    args.output.write(pack('1536s', args.cmdline.encode()))
+    pad_file(args.output, args.pagesize)
+
+def write_vendor_boot_header(args):
+    VENDOR_BOOT_IMAGE_HEADER_V3_SIZE = 2108
+    BOOT_MAGIC = 'VNDRBOOT'.encode()
+
+    args.vendor_boot.write(pack('8s', BOOT_MAGIC))
+    if filesize(args.vendor_ramdisk) == 0:
+        raise ValueError("Vendor ramdisk image must not be empty.")
+    args.vendor_boot.write(pack('5I',
+        args.header_version,                            # version of header
+        args.pagesize,                                  # flash page size we assume
+        args.base + args.kernel_offset,                 # kernel physical load addr
+        args.base + args.ramdisk_offset,                # ramdisk physical load addr
+        filesize(args.vendor_ramdisk)))                 # vendor ramdisk size in bytes
+    args.vendor_boot.write(pack('2048s', args.vendor_cmdline.encode()))
+    args.vendor_boot.write(pack('I', args.base + args.tags_offset)) # physical addr for kernel tags
+    args.vendor_boot.write(pack('16s', args.board.encode())) # asciiz product name
+    args.vendor_boot.write(pack('I', VENDOR_BOOT_IMAGE_HEADER_V3_SIZE)) # header size in bytes
+    if filesize(args.dtb) == 0:
+        raise ValueError("DTB image must not be empty.")
+    args.vendor_boot.write(pack('I', filesize(args.dtb)))   # size in bytes
+    args.vendor_boot.write(pack('Q', args.base + args.dtb_offset)) # dtb physical load address
+    pad_file(args.vendor_boot, args.pagesize)
+
 def write_header(args):
     BOOT_IMAGE_HEADER_V1_SIZE = 1648
     BOOT_IMAGE_HEADER_V2_SIZE = 1660
     BOOT_MAGIC = 'ANDROID!'.encode()
 
-    if (args.header_version > 2):
+    if (args.header_version > 3):
         raise ValueError('Boot header version %d not supported' % args.header_version)
+    elif args.header_version == 3:
+        return write_header_v3(args)
 
     args.output.write(pack('8s', BOOT_MAGIC))
     final_ramdisk_offset = (args.base + args.ramdisk_offset) if filesize(args.ramdisk) > 0 else 0
@@ -179,8 +221,7 @@ def parse_os_patch_level(x):
 
 def parse_cmdline():
     parser = ArgumentParser()
-    parser.add_argument('--kernel', help='path to the kernel', type=FileType('rb'),
-                        required=True)
+    parser.add_argument('--kernel', help='path to the kernel', type=FileType('rb'))
     parser.add_argument('--ramdisk', help='path to the ramdisk', type=FileType('rb'))
     parser.add_argument('--second', help='path to the 2nd bootloader', type=FileType('rb'))
     parser.add_argument('--dtb', help='path to dtb', type=FileType('rb'))
@@ -190,6 +231,8 @@ def parse_cmdline():
                                      type=FileType('rb'), metavar='RECOVERY_ACPIO', dest='recovery_dtbo')
     parser.add_argument('--cmdline', help='extra arguments to be passed on the '
                         'kernel command line', default='', action=ValidateStrLenAction, maxlen=1536)
+    parser.add_argument('--vendor_cmdline', help='kernel command line arguments contained in vendor boot',
+                         default='', action=ValidateStrLenAction, maxlen=2048)
     parser.add_argument('--base', help='base address', type=parse_int, default=0x10000000)
     parser.add_argument('--kernel_offset', help='kernel offset', type=parse_int, default=0x00008000)
     parser.add_argument('--ramdisk_offset', help='ramdisk offset', type=parse_int, default=0x01000000)
@@ -209,8 +252,10 @@ def parse_cmdline():
     parser.add_argument('--id', help='print the image ID on standard output',
                         action='store_true')
     parser.add_argument('--header_version', help='boot image header version', type=parse_int, default=0)
-    parser.add_argument('-o', '--output', help='output file name', type=FileType('wb'),
-                        required=True)
+    parser.add_argument('-o', '--output', help='output file name', type=FileType('wb'))
+    parser.add_argument('--vendor_boot', help='vendor boot output file name', type=FileType('wb'))
+    parser.add_argument('--vendor_ramdisk', help='path to the vendor ramdisk', type=FileType('rb'))
+
     return parser.parse_args()
 
 
@@ -219,20 +264,35 @@ def write_data(args):
     write_padded_file(args.output, args.ramdisk, args.pagesize)
     write_padded_file(args.output, args.second, args.pagesize)
 
-    if args.header_version > 0:
+    if args.header_version > 0 and args.header_version < 3:
         write_padded_file(args.output, args.recovery_dtbo, args.pagesize)
-    if args.header_version > 1:
+    if args.header_version == 2:
         write_padded_file(args.output, args.dtb, args.pagesize)
+
+def write_vendor_boot_data(args):
+    write_padded_file(args.vendor_boot, args.vendor_ramdisk, args.pagesize)
+    write_padded_file(args.vendor_boot, args.dtb, args.pagesize)
 
 def main():
     args = parse_cmdline()
-    img_id = write_header(args)
-    write_data(args)
-    if args.id:
-        if isinstance(img_id, str):
-            # Python 2's struct.pack returns a string, but py3 returns bytes.
-            img_id = [ord(x) for x in img_id]
-        print('0x' + ''.join('{:02x}'.format(c) for c in img_id))
+    if args.vendor_boot is not None:
+        if args.header_version < 3:
+            raise ValueError('--vendor-boot not compatible with given header version')
+        if args.vendor_ramdisk is None:
+            raise ValueError('--vendor_ramdisk missing or invalid')
+        write_vendor_boot_header(args)
+        write_vendor_boot_data(args)
+        return
+    if args.output is not None:
+        if args.kernel is None:
+            raise ValueError('kernel must be supplied when creating a boot image')
+        img_id = write_header(args)
+        write_data(args)
+        if args.id and img_id is not None:
+            if isinstance(img_id, str):
+                 # Python 2's struct.pack returns a string, but py3 returns bytes.
+                 img_id = [ord(x) for x in img_id]
+            print('0x' + ''.join('{:02x}'.format(c) for c in img_id))
 
 if __name__ == '__main__':
     main()
