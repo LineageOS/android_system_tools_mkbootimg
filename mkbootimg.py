@@ -14,13 +14,13 @@
 # limitations under the License.
 
 from __future__ import print_function
-from sys import argv, exit, stderr
+
 from argparse import ArgumentParser, FileType, Action
-from os import fstat
-from struct import pack
 from hashlib import sha1
-import sys
+from os import fstat
 import re
+from struct import pack
+
 
 def filesize(f):
     if f is None:
@@ -66,7 +66,8 @@ def write_header_v3(args):
     BOOT_MAGIC = 'ANDROID!'.encode()
 
     args.output.write(pack('8s', BOOT_MAGIC))
-    args.output.write(pack('4I',
+    args.output.write(pack(
+        '4I',
         filesize(args.kernel),                          # kernel size in bytes
         filesize(args.ramdisk),                         # ramdisk size in bytes
         (args.os_version << 11) | args.os_patch_level,  # os version and patch level
@@ -85,7 +86,8 @@ def write_vendor_boot_header(args):
     args.vendor_boot.write(pack('8s', BOOT_MAGIC))
     if filesize(args.vendor_ramdisk) == 0:
         raise ValueError("Vendor ramdisk image must not be empty.")
-    args.vendor_boot.write(pack('5I',
+    args.vendor_boot.write(pack(
+        '5I',
         args.header_version,                            # version of header
         args.pagesize,                                  # flash page size we assume
         args.base + args.kernel_offset,                 # kernel physical load addr
@@ -106,7 +108,7 @@ def write_header(args):
     BOOT_IMAGE_HEADER_V2_SIZE = 1660
     BOOT_MAGIC = 'ANDROID!'.encode()
 
-    if (args.header_version > 3):
+    if args.header_version > 3:
         raise ValueError('Boot header version %d not supported' % args.header_version)
     elif args.header_version == 3:
         return write_header_v3(args)
@@ -114,7 +116,8 @@ def write_header(args):
     args.output.write(pack('8s', BOOT_MAGIC))
     final_ramdisk_offset = (args.base + args.ramdisk_offset) if filesize(args.ramdisk) > 0 else 0
     final_second_offset = (args.base + args.second_offset) if filesize(args.second) > 0 else 0
-    args.output.write(pack('10I',
+    args.output.write(pack(
+        '10I',
         filesize(args.kernel),                          # size in bytes
         args.base + args.kernel_offset,                 # physical load addr
         filesize(args.ramdisk),                         # size in bytes
@@ -177,8 +180,8 @@ class ValidateStrLenAction(Action):
 
     def __call__(self, parser, namespace, values, option_string=None):
         if len(values) > self.maxlen:
-            raise ValueError('String argument too long: max {0:d}, got {1:d}'.
-                format(self.maxlen, len(values)))
+            raise ValueError(
+                'String argument too long: max {0:d}, got {1:d}'.format(self.maxlen, len(values)))
         setattr(namespace, self.dest, values)
 
 
@@ -191,6 +194,7 @@ def write_padded_file(f_out, f_in, padding):
 
 def parse_int(x):
     return int(x, 0)
+
 
 def parse_os_version(x):
     match = re.search(r'^(\d{1,3})(?:\.(\d{1,3})(?:\.(\d{1,3}))?)?', x)
@@ -208,16 +212,18 @@ def parse_os_version(x):
         return (a << 14) | (b << 7) | c
     return 0
 
+
 def parse_os_patch_level(x):
     match = re.search(r'^(\d{4})-(\d{2})-(\d{2})', x)
     if match:
         y = int(match.group(1)) - 2000
         m = int(match.group(2))
         # 7 bits allocated for the year, 4 bits for the month
-        assert y >= 0 and y < 128
-        assert m > 0 and m <= 12
+        assert 0 <= y < 128
+        assert 0 < m <= 12
         return (y << 4) | m
     return 0
+
 
 def parse_cmdline():
     parser = ArgumentParser()
@@ -226,16 +232,20 @@ def parse_cmdline():
     parser.add_argument('--second', help='path to the 2nd bootloader', type=FileType('rb'))
     parser.add_argument('--dtb', help='path to dtb', type=FileType('rb'))
     recovery_dtbo_group = parser.add_mutually_exclusive_group()
-    recovery_dtbo_group.add_argument('--recovery_dtbo', help='path to the recovery DTBO', type=FileType('rb'))
+    recovery_dtbo_group.add_argument('--recovery_dtbo', help='path to the recovery DTBO',
+                                     type=FileType('rb'))
     recovery_dtbo_group.add_argument('--recovery_acpio', help='path to the recovery ACPIO',
-                                     type=FileType('rb'), metavar='RECOVERY_ACPIO', dest='recovery_dtbo')
+                                     type=FileType('rb'), metavar='RECOVERY_ACPIO',
+                                     dest='recovery_dtbo')
     parser.add_argument('--cmdline', help='extra arguments to be passed on the '
                         'kernel command line', default='', action=ValidateStrLenAction, maxlen=1536)
-    parser.add_argument('--vendor_cmdline', help='kernel command line arguments contained in vendor boot',
-                         default='', action=ValidateStrLenAction, maxlen=2048)
+    parser.add_argument('--vendor_cmdline',
+                        help='kernel command line arguments contained in vendor boot',
+                        default='', action=ValidateStrLenAction, maxlen=2048)
     parser.add_argument('--base', help='base address', type=parse_int, default=0x10000000)
     parser.add_argument('--kernel_offset', help='kernel offset', type=parse_int, default=0x00008000)
-    parser.add_argument('--ramdisk_offset', help='ramdisk offset', type=parse_int, default=0x01000000)
+    parser.add_argument('--ramdisk_offset', help='ramdisk offset', type=parse_int,
+                        default=0x01000000)
     parser.add_argument('--second_offset', help='2nd bootloader offset', type=parse_int,
                         default=0x00f00000)
     parser.add_argument('--dtb_offset', help='dtb offset', type=parse_int, default=0x01f00000)
@@ -248,10 +258,11 @@ def parse_cmdline():
     parser.add_argument('--board', help='board name', default='', action=ValidateStrLenAction,
                         maxlen=16)
     parser.add_argument('--pagesize', help='page size', type=parse_int,
-                        choices=[2**i for i in range(11,15)], default=2048)
+                        choices=[2**i for i in range(11, 15)], default=2048)
     parser.add_argument('--id', help='print the image ID on standard output',
                         action='store_true')
-    parser.add_argument('--header_version', help='boot image header version', type=parse_int, default=0)
+    parser.add_argument('--header_version', help='boot image header version', type=parse_int,
+                        default=0)
     parser.add_argument('-o', '--output', help='output file name', type=FileType('wb'))
     parser.add_argument('--vendor_boot', help='vendor boot output file name', type=FileType('wb'))
     parser.add_argument('--vendor_ramdisk', help='path to the vendor ramdisk', type=FileType('rb'))
@@ -269,15 +280,17 @@ def write_data(args):
     if args.header_version == 2:
         write_padded_file(args.output, args.dtb, args.pagesize)
 
+
 def write_vendor_boot_data(args):
     write_padded_file(args.vendor_boot, args.vendor_ramdisk, args.pagesize)
     write_padded_file(args.vendor_boot, args.dtb, args.pagesize)
+
 
 def main():
     args = parse_cmdline()
     if args.vendor_boot is not None:
         if args.header_version < 3:
-            raise ValueError('--vendor-boot not compatible with given header version')
+            raise ValueError('--vendor_boot not compatible with given header version')
         if args.vendor_ramdisk is None:
             raise ValueError('--vendor_ramdisk missing or invalid')
         write_vendor_boot_header(args)
@@ -289,10 +302,11 @@ def main():
         img_id = write_header(args)
         write_data(args)
         if args.id and img_id is not None:
+            # Python 2's struct.pack returns a string, but py3 returns bytes.
             if isinstance(img_id, str):
-                 # Python 2's struct.pack returns a string, but py3 returns bytes.
-                 img_id = [ord(x) for x in img_id]
+                img_id = [ord(x) for x in img_id]
             print('0x' + ''.join('{:02x}'.format(c) for c in img_id))
+
 
 if __name__ == '__main__':
     main()
