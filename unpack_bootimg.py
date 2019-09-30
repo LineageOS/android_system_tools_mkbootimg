@@ -39,12 +39,12 @@ def extract_image(offset, size, bootimage, extracted_image_name):
 
 def get_number_of_pages(image_size, page_size):
     """calculates the number of pages required for the image"""
-    return (image_size + page_size - 1) / page_size
+    return (image_size + page_size - 1) // page_size
 
 
 def unpack_bootimage(args):
     """extracts kernel, ramdisk, second bootloader and recovery dtbo"""
-    boot_magic = unpack('8s', args.boot_img.read(8))
+    boot_magic = unpack('8s', args.boot_img.read(8))[0].decode()
     print('boot_magic: %s' % boot_magic)
     kernel_ramdisk_second_info = unpack('10I', args.boot_img.read(10 * 4))
     print('kernel_size: %s' % kernel_ramdisk_second_info[0])
@@ -58,14 +58,14 @@ def unpack_bootimage(args):
     print('boot image header version: %s' % kernel_ramdisk_second_info[8])
     print('os version and patch level: %s' % kernel_ramdisk_second_info[9])
 
-    product_name = unpack('16s', args.boot_img.read(16))
+    product_name = unpack('16s', args.boot_img.read(16))[0].decode()
     print('product name: %s' % product_name)
-    cmdline = unpack('512s', args.boot_img.read(512))
+    cmdline = unpack('512s', args.boot_img.read(512))[0].decode()
     print('command line args: %s' % cmdline)
 
     args.boot_img.read(32)  # ignore SHA
 
-    extra_cmdline = unpack('1024s', args.boot_img.read(1024))
+    extra_cmdline = unpack('1024s', args.boot_img.read(1024))[0].decode()
     print('additional command line args: %s' % extra_cmdline)
 
     kernel_size = kernel_ramdisk_second_info[0]
