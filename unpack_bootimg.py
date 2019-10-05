@@ -105,8 +105,8 @@ def unpack_bootimage(args):
 
     if second_size > 0:
         second_offset = page_size * (
-                num_header_pages + num_kernel_pages + num_ramdisk_pages
-                )  # header + kernel + ramdisk
+            num_header_pages + num_kernel_pages + num_ramdisk_pages
+            )  # header + kernel + ramdisk
         image_info_list.append((second_offset, second_size, 'second'))
 
     if recovery_dtbo_size > 0:
