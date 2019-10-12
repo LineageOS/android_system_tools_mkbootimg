@@ -86,8 +86,6 @@ def write_vendor_boot_header(args):
     BOOT_MAGIC = 'VNDRBOOT'.encode()
 
     args.vendor_boot.write(pack('8s', BOOT_MAGIC))
-    if filesize(args.vendor_ramdisk) == 0:
-        raise ValueError("Vendor ramdisk image must not be empty.")
     args.vendor_boot.write(pack(
         '5I',
         args.header_version,                            # version of header
