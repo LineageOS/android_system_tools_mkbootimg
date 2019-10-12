@@ -297,7 +297,6 @@ def main():
             raise ValueError('--vendor_ramdisk missing or invalid')
         write_vendor_boot_header(args)
         write_vendor_boot_data(args)
-        return
     if args.output is not None:
         if args.kernel is None:
             raise ValueError('kernel must be supplied when creating a boot image')
