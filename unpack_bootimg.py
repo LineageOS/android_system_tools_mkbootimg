@@ -23,6 +23,7 @@ from argparse import ArgumentParser, FileType
 from struct import unpack
 import os
 
+BOOT_IMAGE_HEADER_V3_PAGESIZE = 4096
 
 def create_out_dir(dir_path):
     """creates a directory 'dir_path' if it does not exist"""
@@ -44,36 +45,54 @@ def get_number_of_pages(image_size, page_size):
 
 def unpack_bootimage(args):
     """extracts kernel, ramdisk, second bootloader and recovery dtbo"""
-    boot_magic = unpack('8s', args.boot_img.read(8))[0].decode()
-    print('boot_magic: %s' % boot_magic)
-    kernel_ramdisk_second_info = unpack('10I', args.boot_img.read(10 * 4))
-    print('kernel_size: %s' % kernel_ramdisk_second_info[0])
-    print('kernel load address: %#x' % kernel_ramdisk_second_info[1])
-    print('ramdisk size: %s' % kernel_ramdisk_second_info[2])
-    print('ramdisk load address: %#x' % kernel_ramdisk_second_info[3])
-    print('second bootloader size: %s' % kernel_ramdisk_second_info[4])
-    print('second bootloader load address: %#x' % kernel_ramdisk_second_info[5])
-    print('kernel tags load address: %#x' % kernel_ramdisk_second_info[6])
-    print('page size: %s' % kernel_ramdisk_second_info[7])
-    print('boot image header version: %s' % kernel_ramdisk_second_info[8])
-    print('os version and patch level: %s' % kernel_ramdisk_second_info[9])
-
-    product_name = unpack('16s', args.boot_img.read(16))[0].decode()
-    print('product name: %s' % product_name)
-    cmdline = unpack('512s', args.boot_img.read(512))[0].decode()
-    print('command line args: %s' % cmdline)
-
-    args.boot_img.read(32)  # ignore SHA
-
-    extra_cmdline = unpack('1024s', args.boot_img.read(1024))[0].decode()
-    print('additional command line args: %s' % extra_cmdline)
-
-    kernel_size = kernel_ramdisk_second_info[0]
-    ramdisk_size = kernel_ramdisk_second_info[2]
-    second_size = kernel_ramdisk_second_info[4]
-    page_size = kernel_ramdisk_second_info[7]
+    kernel_ramdisk_second_info = unpack('9I', args.boot_img.read(9 * 4))
     version = kernel_ramdisk_second_info[8]
-    if version > 0:
+    if version < 3:
+        print('kernel_size: %s' % kernel_ramdisk_second_info[0])
+        print('kernel load address: %#x' % kernel_ramdisk_second_info[1])
+        print('ramdisk size: %s' % kernel_ramdisk_second_info[2])
+        print('ramdisk load address: %#x' % kernel_ramdisk_second_info[3])
+        print('second bootloader size: %s' % kernel_ramdisk_second_info[4])
+        print('second bootloader load address: %#x' % kernel_ramdisk_second_info[5])
+        print('kernel tags load address: %#x' % kernel_ramdisk_second_info[6])
+        print('page size: %s' % kernel_ramdisk_second_info[7])
+        os_version_patch_level = unpack('I', args.boot_img.read(1 * 4))[0]
+        print('os version and patch level: %s' % os_version_patch_level)
+    else:
+        print('kernel_size: %s' % kernel_ramdisk_second_info[0])
+        print('ramdisk size: %s' % kernel_ramdisk_second_info[1])
+        print('os version and patch level: %s' % kernel_ramdisk_second_info[2])
+
+    print('boot image header version: %s' % version)
+
+    if version < 3:
+        product_name = unpack('16s', args.boot_img.read(16))[0].decode()
+        print('product name: %s' % product_name)
+        cmdline = unpack('512s', args.boot_img.read(512))[0].decode()
+        print('command line args: %s' % cmdline)
+    else:
+        cmdline = unpack('1536s', args.boot_img.read(1536))[0].decode()
+        print('command line args: %s' % cmdline)
+
+    if version < 3:
+        args.boot_img.read(32)  # ignore SHA
+
+    if version < 3:
+        extra_cmdline = unpack('1024s', args.boot_img.read(1024))[0].decode()
+        print('additional command line args: %s' % extra_cmdline)
+
+    if version < 3:
+        kernel_size = kernel_ramdisk_second_info[0]
+        ramdisk_size = kernel_ramdisk_second_info[2]
+        second_size = kernel_ramdisk_second_info[4]
+        page_size = kernel_ramdisk_second_info[7]
+    else:
+        kernel_size = kernel_ramdisk_second_info[0]
+        ramdisk_size = kernel_ramdisk_second_info[1]
+        second_size = 0
+        page_size = BOOT_IMAGE_HEADER_V3_PAGESIZE
+
+    if 0 < version < 3:
         recovery_dtbo_size = unpack('I', args.boot_img.read(1 * 4))[0]
         print('recovery dtbo size: %s' % recovery_dtbo_size)
         recovery_dtbo_offset = unpack('Q', args.boot_img.read(8))[0]
@@ -82,7 +101,7 @@ def unpack_bootimage(args):
         print('boot header size: %s' % boot_header_size)
     else:
         recovery_dtbo_size = 0
-    if version > 1:
+    if 1 < version < 3:
         dtb_size = unpack('I', args.boot_img.read(4))[0]
         print('dtb size: %s' % dtb_size)
         dtb_load_address = unpack('Q', args.boot_img.read(8))[0]
@@ -127,6 +146,55 @@ def unpack_bootimage(args):
                       os.path.join(args.out, image_info[2]))
 
 
+def unpack_vendor_bootimage(args):
+    kernel_ramdisk_info = unpack('5I', args.boot_img.read(5 * 4))
+    print('vendor boot image header version: %s' % kernel_ramdisk_info[0])
+    print('kernel load address: %#x' % kernel_ramdisk_info[2])
+    print('ramdisk load address: %#x' % kernel_ramdisk_info[3])
+    print('vendor ramdisk size: %s' % kernel_ramdisk_info[4])
+
+    cmdline = unpack('2048s', args.boot_img.read(2048))[0].decode()
+    print('vendor command line args: %s' % cmdline)
+
+    tags_load_address = unpack('I', args.boot_img.read(1 * 4))[0]
+    print('kernel tags load address: %#x' % tags_load_address)
+
+    product_name = unpack('16s', args.boot_img.read(16))[0].decode()
+    print('product name: %s' % product_name)
+
+    dtb_size = unpack('2I', args.boot_img.read(2 * 4))[1]
+    print('dtb size: %s' % dtb_size)
+    dtb_load_address = unpack('Q', args.boot_img.read(8))[0]
+    print('dtb address: %#x' % dtb_load_address)
+
+    ramdisk_size = kernel_ramdisk_info[4]
+    page_size = kernel_ramdisk_info[1]
+
+    # The first page contains the boot header
+    num_boot_header_pages = 1
+
+    num_boot_ramdisk_pages = get_number_of_pages(ramdisk_size, page_size)
+    ramdisk_offset = page_size * num_boot_header_pages # header occupies a page
+    image_info_list = [(ramdisk_offset, ramdisk_size, 'vendor_ramdisk')]
+
+    dtb_offset = page_size * (num_boot_header_pages + num_boot_ramdisk_pages
+                             ) # header + vendor_ramdisk
+    image_info_list.append((dtb_offset, dtb_size, 'dtb'))
+
+    for image_info in image_info_list:
+        extract_image(image_info[0], image_info[1], args.boot_img,
+                      os.path.join(args.out, image_info[2]))
+
+
+def unpack_image(args):
+    boot_magic = unpack('8s', args.boot_img.read(8))[0].decode()
+    print('boot_magic: %s' % boot_magic)
+    if boot_magic == "ANDROID!":
+        unpack_bootimage(args)
+    elif boot_magic == "VNDRBOOT":
+        unpack_vendor_bootimage(args)
+
+
 def parse_cmdline():
     """parse command line arguments"""
     parser = ArgumentParser(
@@ -145,7 +213,7 @@ def main():
     """parse arguments and unpack boot image"""
     args = parse_cmdline()
     create_out_dir(args.out)
-    unpack_bootimage(args)
+    unpack_image(args)
 
 
 if __name__ == '__main__':

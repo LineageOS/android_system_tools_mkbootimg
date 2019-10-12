@@ -86,8 +86,6 @@ def write_vendor_boot_header(args):
     BOOT_MAGIC = 'VNDRBOOT'.encode()
 
     args.vendor_boot.write(pack('8s', BOOT_MAGIC))
-    if filesize(args.vendor_ramdisk) == 0:
-        raise ValueError("Vendor ramdisk image must not be empty.")
     args.vendor_boot.write(pack(
         '5I',
         args.header_version,                            # version of header
@@ -297,7 +295,6 @@ def main():
             raise ValueError('--vendor_ramdisk missing or invalid')
         write_vendor_boot_header(args)
         write_vendor_boot_data(args)
-        return
     if args.output is not None:
         if args.kernel is None:
             raise ValueError('kernel must be supplied when creating a boot image')
