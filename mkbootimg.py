@@ -214,7 +214,7 @@ def parse_os_version(x):
 
 
 def parse_os_patch_level(x):
-    match = re.search(r'^(\d{4})-(\d{2})-(\d{2})', x)
+    match = re.search(r'^(\d{4})-(\d{2})(?:-(\d{2}))?', x)
     if match:
         y = int(match.group(1)) - 2000
         m = int(match.group(2))
