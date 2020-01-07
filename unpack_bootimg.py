@@ -43,6 +43,27 @@ def get_number_of_pages(image_size, page_size):
     return (image_size + page_size - 1) // page_size
 
 
+def format_os_version(os_version):
+    a = os_version >> 14
+    b = os_version >> 7 & ((1<<7) - 1)
+    c = os_version & ((1<<7) - 1)
+    return '{}.{}.{}'.format(a, b, c)
+
+
+def format_os_patch_level(os_patch_level):
+    y = os_patch_level >> 4
+    y += 2000
+    m = os_patch_level & ((1<<4) - 1)
+    return '{:04d}-{:02d}'.format(y, m)
+
+
+def print_os_version_patch_level(value):
+    os_version = value >> 11
+    os_patch_level = value & ((1<<11) - 1)
+    print('os version: %s' % format_os_version(os_version))
+    print('os patch level: %s' % format_os_patch_level(os_patch_level))
+
+
 def unpack_bootimage(args):
     """extracts kernel, ramdisk, second bootloader and recovery dtbo"""
     kernel_ramdisk_second_info = unpack('9I', args.boot_img.read(9 * 4))
@@ -56,12 +77,11 @@ def unpack_bootimage(args):
         print('second bootloader load address: %#x' % kernel_ramdisk_second_info[5])
         print('kernel tags load address: %#x' % kernel_ramdisk_second_info[6])
         print('page size: %s' % kernel_ramdisk_second_info[7])
-        os_version_patch_level = unpack('I', args.boot_img.read(1 * 4))[0]
-        print('os version and patch level: %s' % os_version_patch_level)
+        print_os_version_patch_level(unpack('I', args.boot_img.read(1 * 4))[0])
     else:
         print('kernel_size: %s' % kernel_ramdisk_second_info[0])
         print('ramdisk size: %s' % kernel_ramdisk_second_info[1])
-        print('os version and patch level: %s' % kernel_ramdisk_second_info[2])
+        print_os_version_patch_level(kernel_ramdisk_second_info[2])
 
     print('boot image header version: %s' % version)
 
