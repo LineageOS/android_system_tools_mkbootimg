@@ -43,6 +43,11 @@ def get_number_of_pages(image_size, page_size):
     return (image_size + page_size - 1) // page_size
 
 
+def cstr(s):
+    """Remove first NULL character and any character beyond."""
+    return s.split('\0', 1)[0]
+
+
 def format_os_version(os_version):
     a = os_version >> 14
     b = os_version >> 7 & ((1<<7) - 1)
@@ -86,19 +91,20 @@ def unpack_bootimage(args):
     print('boot image header version: %s' % version)
 
     if version < 3:
-        product_name = unpack('16s', args.boot_img.read(16))[0].decode()
+        product_name = cstr(unpack('16s', args.boot_img.read(16))[0].decode())
         print('product name: %s' % product_name)
-        cmdline = unpack('512s', args.boot_img.read(512))[0].decode()
+        cmdline = cstr(unpack('512s', args.boot_img.read(512))[0].decode())
         print('command line args: %s' % cmdline)
     else:
-        cmdline = unpack('1536s', args.boot_img.read(1536))[0].decode()
+        cmdline = cstr(unpack('1536s', args.boot_img.read(1536))[0].decode())
         print('command line args: %s' % cmdline)
 
     if version < 3:
         args.boot_img.read(32)  # ignore SHA
 
     if version < 3:
-        extra_cmdline = unpack('1024s', args.boot_img.read(1024))[0].decode()
+        extra_cmdline = cstr(unpack('1024s',
+                                    args.boot_img.read(1024))[0].decode())
         print('additional command line args: %s' % extra_cmdline)
 
     if version < 3:
@@ -173,13 +179,13 @@ def unpack_vendor_bootimage(args):
     print('ramdisk load address: %#x' % kernel_ramdisk_info[3])
     print('vendor ramdisk size: %s' % kernel_ramdisk_info[4])
 
-    cmdline = unpack('2048s', args.boot_img.read(2048))[0].decode()
+    cmdline = cstr(unpack('2048s', args.boot_img.read(2048))[0].decode())
     print('vendor command line args: %s' % cmdline)
 
     tags_load_address = unpack('I', args.boot_img.read(1 * 4))[0]
     print('kernel tags load address: %#x' % tags_load_address)
 
-    product_name = unpack('16s', args.boot_img.read(16))[0].decode()
+    product_name = cstr(unpack('16s', args.boot_img.read(16))[0].decode())
     print('product name: %s' % product_name)
 
     dtb_size = unpack('2I', args.boot_img.read(2 * 4))[1]
