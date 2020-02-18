@@ -171,9 +171,9 @@ struct boot_img_hdr_v2 : public boot_img_hdr_v1 {
  * +---------------------+
  * | boot header         | 4096 bytes
  * +---------------------+
- * | kernel              | m
+ * | kernel              | m pages
  * +---------------------+
- * | ramdisk             | n
+ * | ramdisk             | n pages
  * +---------------------+
  *
  * m = (kernel_size + 4096 - 1) / 4096
@@ -185,15 +185,16 @@ struct boot_img_hdr_v2 : public boot_img_hdr_v1 {
  * required to be present when a v3 boot image is used) is as follows:
  *
  * +---------------------+
- * | vendor boot header  | 1 page
+ * | vendor boot header  | o pages
  * +---------------------+
- * | vendor ramdisk      | o pages
+ * | vendor ramdisk      | p pages
  * +---------------------+
- * | dtb                 | p pages
+ * | dtb                 | q pages
  * +---------------------+
 
- * o = (vendor_ramdisk_size + page_size - 1) / page_size
- * p = (dtb_size + page_size - 1) / page_size
+ * o = (2108 + page_size - 1) / page_size
+ * p = (vendor_ramdisk_size + page_size - 1) / page_size
+ * q = (dtb_size + page_size - 1) / page_size
  *
  * 0. all entities in the boot image are 4096-byte aligned in flash, all
  *    entities in the vendor boot image are page_size (determined by the vendor
