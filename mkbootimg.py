@@ -82,7 +82,7 @@ def write_header_v3(args):
     pad_file(args.output, BOOT_IMAGE_HEADER_V3_PAGESIZE)
 
 def write_vendor_boot_header(args):
-    VENDOR_BOOT_IMAGE_HEADER_V3_SIZE = 2108
+    VENDOR_BOOT_IMAGE_HEADER_V3_SIZE = 2112
     BOOT_MAGIC = 'VNDRBOOT'.encode()
 
     args.vendor_boot.write(pack('8s', BOOT_MAGIC))
