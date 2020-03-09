@@ -190,7 +190,7 @@ struct boot_img_hdr_v2 : public boot_img_hdr_v1 {
  * | dtb                 | q pages
  * +---------------------+
 
- * o = (2108 + page_size - 1) / page_size
+ * o = (2112 + page_size - 1) / page_size
  * p = (vendor_ramdisk_size + page_size - 1) / page_size
  * q = (dtb_size + page_size - 1) / page_size
  *
