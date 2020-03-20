@@ -24,7 +24,7 @@ from struct import unpack
 import os
 
 BOOT_IMAGE_HEADER_V3_PAGESIZE = 4096
-VENDOR_BOOT_IMAGE_HEADER_V3_SIZE = 2108
+VENDOR_BOOT_IMAGE_HEADER_V3_SIZE = 2112
 
 def create_out_dir(dir_path):
     """creates a directory 'dir_path' if it does not exist"""
