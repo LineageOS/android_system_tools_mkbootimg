@@ -44,7 +44,7 @@ struct boot_img_hdr_v0 {
     uint32_t second_size; /* size in bytes */
     uint32_t second_addr; /* physical load addr */
 
-    uint32_t tags_addr; /* physical addr for kernel tags */
+    uint32_t tags_addr; /* physical addr for kernel tags (if required) */
     uint32_t page_size; /* flash page size we assume */
 
     // Version of the boot image header.
@@ -153,10 +153,8 @@ struct boot_img_hdr_v1 : public boot_img_hdr_v0 {
  * 5. If booting to recovery mode in a non-A/B device, extract recovery
  *    dtbo/acpio and apply the correct set of overlays on the base device tree
  *    depending on the hardware/product revision.
- * 6. prepare tags at tag_addr.  kernel_args[] is
- *    appended to the kernel commandline in the tags.
- * 7. r0 = 0, r1 = MACHINE_TYPE, r2 = tags_addr
- * 8. if second_size != 0: jump to second_addr
+ * 6. set up registers for kernel entry as required by your architecture
+ * 7. if second_size != 0: jump to second_addr
  *    else: jump to kernel_addr
  */
 struct boot_img_hdr_v2 : public boot_img_hdr_v1 {
@@ -192,7 +190,7 @@ struct boot_img_hdr_v2 : public boot_img_hdr_v1 {
  * | dtb                 | q pages
  * +---------------------+
 
- * o = (2108 + page_size - 1) / page_size
+ * o = (2112 + page_size - 1) / page_size
  * p = (vendor_ramdisk_size + page_size - 1) / page_size
  * q = (dtb_size + page_size - 1) / page_size
  *
@@ -205,10 +203,8 @@ struct boot_img_hdr_v2 : public boot_img_hdr_v1 {
  * 3. load the vendor ramdisk at ramdisk_addr
  * 4. load the generic ramdisk immediately following the vendor ramdisk in
  *    memory
- * 5. prepare tags at tag_addr.  kernel_args[] is appended to the kernel
- *    commandline in the tags.
- * 6. r0 = 0, r1 = MACHINE_TYPE, r2 = tags_addr
- * 7. if the platform has a second stage bootloader jump to it (must be
+ * 5. set up registers for kernel entry as required by your architecture
+ * 6. if the platform has a second stage bootloader jump to it (must be
  *    contained outside boot and vendor boot partitions), otherwise
  *    jump to kernel_addr
  */
@@ -263,7 +259,7 @@ struct vendor_boot_img_hdr_v3 {
 
     uint8_t cmdline[VENDOR_BOOT_ARGS_SIZE];
 
-    uint32_t tags_addr; /* physical addr for kernel tags */
+    uint32_t tags_addr; /* physical addr for kernel tags (if required) */
     uint8_t name[VENDOR_BOOT_NAME_SIZE]; /* asciiz product name */
 
     uint32_t header_size;
