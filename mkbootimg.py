@@ -64,7 +64,7 @@ def get_recovery_dtbo_offset(args):
 
 
 def write_header_v3(args):
-    BOOT_IMAGE_HEADER_V3_SIZE = 1596
+    BOOT_IMAGE_HEADER_V3_SIZE = 1580
     BOOT_MAGIC = 'ANDROID!'.encode()
 
     args.output.write(pack('8s', BOOT_MAGIC))
