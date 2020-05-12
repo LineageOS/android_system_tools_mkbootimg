@@ -29,8 +29,34 @@
 #define VENDOR_BOOT_ARGS_SIZE 2048
 #define VENDOR_BOOT_NAME_SIZE 16
 
-// The bootloader expects the structure of boot_img_hdr with header
-// version 0 to be as follows:
+/* When a boot header is of version 0, the structure of boot image is as
+ * follows:
+ *
+ * +-----------------+
+ * | boot header     | 1 page
+ * +-----------------+
+ * | kernel          | n pages
+ * +-----------------+
+ * | ramdisk         | m pages
+ * +-----------------+
+ * | second stage    | o pages
+ * +-----------------+
+ *
+ * n = (kernel_size + page_size - 1) / page_size
+ * m = (ramdisk_size + page_size - 1) / page_size
+ * o = (second_size + page_size - 1) / page_size
+ *
+ * 0. all entities are page_size aligned in flash
+ * 1. kernel and ramdisk are required (size != 0)
+ * 2. second is optional (second_size == 0 -> no second)
+ * 3. load each element (kernel, ramdisk, second) at
+ *    the specified physical address (kernel_addr, etc)
+ * 4. prepare tags at tag_addr.  kernel_args[] is
+ *    appended to the kernel commandline in the tags.
+ * 5. r0 = 0, r1 = MACHINE_TYPE, r2 = tags_addr
+ * 6. if second_size != 0: jump to second_addr
+ *    else: jump to kernel_addr
+ */
 struct boot_img_hdr_v0 {
     // Must be BOOT_MAGIC.
     uint8_t magic[BOOT_MAGIC_SIZE];
@@ -85,35 +111,40 @@ struct boot_img_hdr_v0 {
  */
 typedef struct boot_img_hdr_v0 boot_img_hdr;
 
-/* When a boot header is of version 0, the structure of boot image is as
+/* When a boot header is of version 1, the structure of boot image is as
  * follows:
  *
- * +-----------------+
- * | boot header     | 1 page
- * +-----------------+
- * | kernel          | n pages
- * +-----------------+
- * | ramdisk         | m pages
- * +-----------------+
- * | second stage    | o pages
- * +-----------------+
+ * +---------------------+
+ * | boot header         | 1 page
+ * +---------------------+
+ * | kernel              | n pages
+ * +---------------------+
+ * | ramdisk             | m pages
+ * +---------------------+
+ * | second stage        | o pages
+ * +---------------------+
+ * | recovery dtbo/acpio | p pages
+ * +---------------------+
  *
  * n = (kernel_size + page_size - 1) / page_size
  * m = (ramdisk_size + page_size - 1) / page_size
  * o = (second_size + page_size - 1) / page_size
+ * p = (recovery_dtbo_size + page_size - 1) / page_size
  *
  * 0. all entities are page_size aligned in flash
  * 1. kernel and ramdisk are required (size != 0)
- * 2. second is optional (second_size == 0 -> no second)
- * 3. load each element (kernel, ramdisk, second) at
+ * 2. recovery_dtbo/recovery_acpio is required for recovery.img in non-A/B
+ *    devices(recovery_dtbo_size != 0)
+ * 3. second is optional (second_size == 0 -> no second)
+ * 4. load each element (kernel, ramdisk, second) at
  *    the specified physical address (kernel_addr, etc)
- * 4. prepare tags at tag_addr.  kernel_args[] is
- *    appended to the kernel commandline in the tags.
- * 5. r0 = 0, r1 = MACHINE_TYPE, r2 = tags_addr
- * 6. if second_size != 0: jump to second_addr
+ * 5. If booting to recovery mode in a non-A/B device, extract recovery
+ *    dtbo/acpio and apply the correct set of overlays on the base device tree
+ *    depending on the hardware/product revision.
+ * 6. set up registers for kernel entry as required by your architecture
+ * 7. if second_size != 0: jump to second_addr
  *    else: jump to kernel_addr
  */
-
 struct boot_img_hdr_v1 : public boot_img_hdr_v0 {
     uint32_t recovery_dtbo_size;   /* size in bytes for recovery DTBO/ACPIO image */
     uint64_t recovery_dtbo_offset; /* offset to recovery dtbo/acpio in boot image */
