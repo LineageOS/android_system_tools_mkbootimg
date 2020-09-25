@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "c604fa31_82169d55",
+        "filename": "mkbootimg.py",
+        "patchSetId": 1
+      },
+      "lineNbr": 129,
+      "author": {
+        "id": 18205
+      },
+      "writtenOn": "2020-09-25T20:13:26Z",
+      "side": 1,
+      "message": "17.1 patch said \" or dt size in bytes\"",
+      "range": {
+        "startLine": 129,
+        "startChar": 56,
+        "endLine": 129,
+        "endChar": 85
+      },
+      "revId": "2e047f2c4d441f1bc2bb33adac3e4e2c4f239064",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71",
+      "unresolved": true
+    }
+  ]
+}
