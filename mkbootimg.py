@@ -296,8 +296,6 @@ def main():
         write_vendor_boot_header(args)
         write_vendor_boot_data(args)
     if args.output is not None:
-        if args.kernel is None:
-            raise ValueError('kernel must be supplied when creating a boot image')
         if args.second is not None and args.header_version > 2:
             raise ValueError('--second not compatible with given header version')
         img_id = write_header(args)
