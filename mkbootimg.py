@@ -114,16 +114,14 @@ def write_header(args):
         return write_header_v3(args)
 
     args.output.write(pack('8s', BOOT_MAGIC))
-    final_ramdisk_offset = (args.base + args.ramdisk_offset) if filesize(args.ramdisk) > 0 else 0
-    final_second_offset = (args.base + args.second_offset) if filesize(args.second) > 0 else 0
     args.output.write(pack(
         '10I',
         filesize(args.kernel),                          # size in bytes
         args.base + args.kernel_offset,                 # physical load addr
         filesize(args.ramdisk),                         # size in bytes
-        final_ramdisk_offset,                           # physical load addr
+        args.base + args.ramdisk_offset,                # physical load addr
         filesize(args.second),                          # size in bytes
-        final_second_offset,                            # physical load addr
+        args.base + args.second_offset,                 # physical load addr
         args.base + args.tags_offset,                   # physical addr for kernel tags
         args.pagesize,                                  # flash page size we assume
         max(args.header_version, filesize(args.dt)),    # version of bootimage header or dt size in bytes
