@@ -15,14 +15,23 @@
 
 from __future__ import print_function
 
-from argparse import ArgumentParser, FileType, Action
+from argparse import (Action, ArgumentParser, FileType,
+                      RawDescriptionHelpFormatter)
 from hashlib import sha1
 from os import fstat
-import re
 from struct import pack
 
+import array
+import collections
+import re
 
 BOOT_IMAGE_HEADER_V3_PAGESIZE = 4096
+
+VENDOR_RAMDISK_TYPE_NONE = 0
+VENDOR_RAMDISK_TYPE_PLATFORM = 1
+VENDOR_RAMDISK_TYPE_RECOVERY = 2
+VENDOR_RAMDISK_TYPE_DLKM = 3
+VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE = 16
 
 def filesize(f):
     if f is None:
@@ -81,9 +90,17 @@ def write_header_v3(args):
     args.output.write(pack('1536s', args.cmdline.encode()))
     pad_file(args.output, BOOT_IMAGE_HEADER_V3_PAGESIZE)
 
+
 def write_vendor_boot_header(args):
     VENDOR_BOOT_IMAGE_HEADER_V3_SIZE = 2112
+    VENDOR_BOOT_IMAGE_HEADER_V4_SIZE = 2124
+    VENDOR_RAMDISK_TABLE_ENTRY_V4_SIZE = 76
     BOOT_MAGIC = 'VNDRBOOT'.encode()
+
+    if args.header_version > 3:
+        vendor_ramdisk_size = args.vendor_ramdisk_total_size
+    else:
+        vendor_ramdisk_size = filesize(args.vendor_ramdisk)
 
     args.vendor_boot.write(pack('8s', BOOT_MAGIC))
     args.vendor_boot.write(pack(
@@ -92,25 +109,40 @@ def write_vendor_boot_header(args):
         args.pagesize,                                  # flash page size we assume
         args.base + args.kernel_offset,                 # kernel physical load addr
         args.base + args.ramdisk_offset,                # ramdisk physical load addr
-        filesize(args.vendor_ramdisk)))                 # vendor ramdisk size in bytes
+        vendor_ramdisk_size))                           # vendor ramdisk size in bytes
     args.vendor_boot.write(pack('2048s', args.vendor_cmdline.encode()))
     args.vendor_boot.write(pack('I', args.base + args.tags_offset)) # physical addr for kernel tags
     args.vendor_boot.write(pack('16s', args.board.encode())) # asciiz product name
-    args.vendor_boot.write(pack('I', VENDOR_BOOT_IMAGE_HEADER_V3_SIZE)) # header size in bytes
+
+    if args.header_version > 3:
+        args.vendor_boot.write(pack('I', VENDOR_BOOT_IMAGE_HEADER_V4_SIZE)) # header size in bytes
+    else:
+        args.vendor_boot.write(pack('I', VENDOR_BOOT_IMAGE_HEADER_V3_SIZE)) # header size in bytes
+
     if filesize(args.dtb) == 0:
         raise ValueError("DTB image must not be empty.")
     args.vendor_boot.write(pack('I', filesize(args.dtb)))   # size in bytes
     args.vendor_boot.write(pack('Q', args.base + args.dtb_offset)) # dtb physical load address
+
+    if args.header_version > 3:
+        vendor_ramdisk_table_size = (
+            args.vendor_ramdisk_table_entry_num * VENDOR_RAMDISK_TABLE_ENTRY_V4_SIZE)
+        args.vendor_boot.write(pack(
+            '3I',
+            vendor_ramdisk_table_size,                  # vendor ramdisk table size in bytes
+            args.vendor_ramdisk_table_entry_num,        # number of vendor ramdisk table entries
+            VENDOR_RAMDISK_TABLE_ENTRY_V4_SIZE))        # vendor ramdisk table entry size in bytes
     pad_file(args.vendor_boot, args.pagesize)
+
 
 def write_header(args):
     BOOT_IMAGE_HEADER_V1_SIZE = 1648
     BOOT_IMAGE_HEADER_V2_SIZE = 1660
     BOOT_MAGIC = 'ANDROID!'.encode()
 
-    if args.header_version > 3:
+    if args.header_version > 4:
         raise ValueError('Boot header version %d not supported' % args.header_version)
-    elif args.header_version == 3:
+    if args.header_version in {3, 4}:
         return write_header_v3(args)
 
     args.output.write(pack('8s', BOOT_MAGIC))
@@ -185,6 +217,52 @@ class ValidateStrLenAction(Action):
         setattr(namespace, self.dest, values)
 
 
+class VendorRamdiskTableBuilder:
+    """Vendor ramdisk table builder.
+
+    Attributes:
+        entries: A list of VendorRamdiskTableEntry namedtuple.
+        ramdisk_total_size: Total size in bytes of all ramdisks in the table.
+    """
+
+    VendorRamdiskTableEntry = collections.namedtuple(
+        'VendorRamdiskTableEntry',
+        ['ramdisk_path', 'ramdisk_size', 'ramdisk_offset', 'ramdisk_type', 'board_id'])
+
+    def __init__(self):
+        self.entries = []
+        self.ramdisk_total_size = 0
+
+    def add_entry(self, ramdisk_path, ramdisk_type=VENDOR_RAMDISK_TYPE_NONE, board_id=None):
+        if board_id is None:
+            board_id = array.array('I', [0] * VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE)
+        else:
+            board_id = array.array('I', board_id)
+        if len(board_id) != VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE:
+            raise ValueError(
+                'board_id size must be {}'.format(VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE))
+
+        with open(ramdisk_path, 'rb') as f:
+            ramdisk_size = filesize(f)
+        self.entries.append(self.VendorRamdiskTableEntry(
+            ramdisk_path, ramdisk_size, self.ramdisk_total_size, ramdisk_type, board_id))
+        self.ramdisk_total_size += ramdisk_size
+
+    def write_ramdisks_padded(self, fout, alignment):
+        for entry in self.entries:
+            with open(entry.ramdisk_path, 'rb') as f:
+                fout.write(f.read())
+        pad_file(fout, alignment)
+
+    def write_entries_padded(self, fout, alignment):
+        for entry in self.entries:
+            fout.write(pack('I', entry.ramdisk_size))
+            fout.write(pack('I', entry.ramdisk_offset))
+            fout.write(pack('I', entry.ramdisk_type))
+            fout.write(entry.board_id)
+        pad_file(fout, alignment)
+
+
 def write_padded_file(f_out, f_in, padding):
     if f_in is None:
         return
@@ -225,8 +303,86 @@ def parse_os_patch_level(x):
     return 0
 
 
+def parse_vendor_ramdisk_type(x):
+    type_dict = {
+        'none': VENDOR_RAMDISK_TYPE_NONE,
+        'platform': VENDOR_RAMDISK_TYPE_PLATFORM,
+        'recovery': VENDOR_RAMDISK_TYPE_RECOVERY,
+        'dlkm': VENDOR_RAMDISK_TYPE_DLKM,
+    }
+    if x.lower() in type_dict:
+        return type_dict[x.lower()]
+    return parse_int(x)
+
+
+def get_vendor_boot_v4_usage():
+    return """vendor boot version 4 arguments:
+  --ramdisk_type {none,platform,recovery,dlkm}
+                        specify the type of the ramdisk
+  --board_id{0..15} NUMBER
+                        specify the value of the board_id vector, defaults to 0
+  --vendor_ramdisk_fragment VENDOR_RAMDISK_FILE
+                        path to the vendor ramdisk file
+
+  These options can be specified multiple times, where each vendor ramdisk
+  option group ends with a --vendor_ramdisk_fragment option.
+  Each option group appends an additional ramdisk to the vendor boot image.
+"""
+
+
+def parse_vendor_ramdisk_args(args, args_list):
+    """Parses vendor ramdisk specific arguments.
+
+    Args:
+        args: An argparse.Namespace object. Parsed results are stored into this
+            object.
+        args_list: A list of argument strings to be parsed.
+
+    Returns:
+        A list argument strings that are not parsed by this method.
+    """
+    VENDOR_RAMDISK_FRAGMENT_OPTION = '--vendor_ramdisk_fragment'
+
+    parser = ArgumentParser(add_help=False)
+    parser.add_argument('--ramdisk_type', type=parse_vendor_ramdisk_type,
+                        default=VENDOR_RAMDISK_TYPE_NONE)
+    for i in range(VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE):
+        parser.add_argument('--board_id{}'.format(i), type=parse_int, default=0)
+    parser.add_argument(VENDOR_RAMDISK_FRAGMENT_OPTION, required=True)
+
+    unknown_args = []
+
+    vendor_ramdisk_table_builder = VendorRamdiskTableBuilder()
+    if args.vendor_ramdisk is not None:
+        vendor_ramdisk_table_builder.add_entry(args.vendor_ramdisk.name)
+
+    while VENDOR_RAMDISK_FRAGMENT_OPTION in args_list:
+        idx = args_list.index(VENDOR_RAMDISK_FRAGMENT_OPTION) + 2
+        vendor_ramdisk_args = args_list[:idx]
+        args_list = args_list[idx:]
+
+        ramdisk_args, extra_args = parser.parse_known_args(vendor_ramdisk_args)
+        ramdisk_args_dict = vars(ramdisk_args)
+        unknown_args.extend(extra_args)
+
+        ramdisk_path = ramdisk_args.vendor_ramdisk_fragment
+        ramdisk_type = ramdisk_args.ramdisk_type
+        board_id = [ramdisk_args_dict['board_id{}'.format(i)]
+                    for i in range(VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE)]
+        vendor_ramdisk_table_builder.add_entry(ramdisk_path, ramdisk_type, board_id)
+
+    if len(args_list) > 0:
+        unknown_args.extend(args_list)
+
+    args.vendor_ramdisk_total_size = vendor_ramdisk_table_builder.ramdisk_total_size
+    args.vendor_ramdisk_table_entry_num = len(vendor_ramdisk_table_builder.entries)
+    args.vendor_ramdisk_table_builder = vendor_ramdisk_table_builder
+    return unknown_args
+
+
 def parse_cmdline():
-    parser = ArgumentParser()
+    parser = ArgumentParser(formatter_class=RawDescriptionHelpFormatter,
+                            epilog=get_vendor_boot_v4_usage())
     parser.add_argument('--kernel', help='path to the kernel', type=FileType('rb'))
     parser.add_argument('--ramdisk', help='path to the ramdisk', type=FileType('rb'))
     parser.add_argument('--second', help='path to the 2nd bootloader', type=FileType('rb'))
@@ -267,7 +423,12 @@ def parse_cmdline():
     parser.add_argument('--vendor_boot', help='vendor boot output file name', type=FileType('wb'))
     parser.add_argument('--vendor_ramdisk', help='path to the vendor ramdisk', type=FileType('rb'))
 
-    return parser.parse_args()
+    args, extra_args = parser.parse_known_args()
+    if args.vendor_boot is not None and args.header_version > 3:
+        extra_args = parse_vendor_ramdisk_args(args, extra_args)
+    if len(extra_args) > 0:
+        raise ValueError('Unrecognized arguments: {}'.format(extra_args))
+    return args
 
 
 def write_data(args, pagesize):
@@ -282,16 +443,22 @@ def write_data(args, pagesize):
 
 
 def write_vendor_boot_data(args):
-    write_padded_file(args.vendor_boot, args.vendor_ramdisk, args.pagesize)
-    write_padded_file(args.vendor_boot, args.dtb, args.pagesize)
+    if args.header_version > 3:
+        builder = args.vendor_ramdisk_table_builder
+        builder.write_ramdisks_padded(args.vendor_boot, args.pagesize)
+        write_padded_file(args.vendor_boot, args.dtb, args.pagesize)
+        builder.write_entries_padded(args.vendor_boot, args.pagesize)
+    else:
+        write_padded_file(args.vendor_boot, args.vendor_ramdisk, args.pagesize)
+        write_padded_file(args.vendor_boot, args.dtb, args.pagesize)
 
 
 def main():
     args = parse_cmdline()
     if args.vendor_boot is not None:
-        if args.header_version < 3:
+        if args.header_version not in {3, 4}:
             raise ValueError('--vendor_boot not compatible with given header version')
-        if args.vendor_ramdisk is None:
+        if args.header_version == 3 and args.vendor_ramdisk is None:
             raise ValueError('--vendor_ramdisk missing or invalid')
         write_vendor_boot_header(args)
         write_vendor_boot_data(args)
