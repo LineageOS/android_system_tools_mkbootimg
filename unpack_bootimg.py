@@ -24,7 +24,7 @@ from struct import unpack
 import os
 
 BOOT_IMAGE_HEADER_V3_PAGESIZE = 4096
-VENDOR_BOOT_IMAGE_HEADER_V3_SIZE = 2112
+VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE = 16
 
 def create_out_dir(dir_path):
     """creates a directory 'dir_path' if it does not exist"""
@@ -175,10 +175,17 @@ def unpack_bootimage(args):
 
 def unpack_vendor_bootimage(args):
     kernel_ramdisk_info = unpack('5I', args.boot_img.read(5 * 4))
-    print('vendor boot image header version: %s' % kernel_ramdisk_info[0])
+    header_version = kernel_ramdisk_info[0]
+    page_size = kernel_ramdisk_info[1]
+    ramdisk_size = kernel_ramdisk_info[4]
+    print('vendor boot image header version: %s' % header_version)
+    print('page size: %#x' % page_size)
     print('kernel load address: %#x' % kernel_ramdisk_info[2])
     print('ramdisk load address: %#x' % kernel_ramdisk_info[3])
-    print('vendor ramdisk size: %s' % kernel_ramdisk_info[4])
+    if header_version > 3:
+        print('vendor ramdisk total size: %s' % ramdisk_size)
+    else:
+        print('vendor ramdisk size: %s' % ramdisk_size)
 
     cmdline = cstr(unpack('2048s', args.boot_img.read(2048))[0].decode())
     print('vendor command line args: %s' % cmdline)
@@ -189,19 +196,59 @@ def unpack_vendor_bootimage(args):
     product_name = cstr(unpack('16s', args.boot_img.read(16))[0].decode())
     print('product name: %s' % product_name)
 
-    dtb_size = unpack('2I', args.boot_img.read(2 * 4))[1]
+    header_size = unpack('I', args.boot_img.read(4))[0]
+    print('vendor boot image header size: %s' % header_size)
+
+    dtb_size = unpack('I', args.boot_img.read(4))[0]
     print('dtb size: %s' % dtb_size)
     dtb_load_address = unpack('Q', args.boot_img.read(8))[0]
     print('dtb address: %#x' % dtb_load_address)
 
-    ramdisk_size = kernel_ramdisk_info[4]
-    page_size = kernel_ramdisk_info[1]
-
     # The first pages contain the boot header
-    num_boot_header_pages = get_number_of_pages(VENDOR_BOOT_IMAGE_HEADER_V3_SIZE, page_size)
+    num_boot_header_pages = get_number_of_pages(header_size, page_size)
     num_boot_ramdisk_pages = get_number_of_pages(ramdisk_size, page_size)
-    ramdisk_offset = page_size * num_boot_header_pages
-    image_info_list = [(ramdisk_offset, ramdisk_size, 'vendor_ramdisk')]
+    num_boot_dtb_pages = get_number_of_pages(dtb_size, page_size)
+
+    ramdisk_offset_base = page_size * num_boot_header_pages
+    image_info_list = []
+
+    if header_version > 3:
+        vendor_ramdisk_table_size = unpack('I', args.boot_img.read(4))[0]
+        vendor_ramdisk_table_entry_num = unpack('I', args.boot_img.read(4))[0]
+        vendor_ramdisk_table_entry_size = unpack('I', args.boot_img.read(4))[0]
+        vendor_ramdisk_table_offset = page_size * (
+            num_boot_header_pages + num_boot_ramdisk_pages + num_boot_dtb_pages)
+        print('vendor ramdisk table size: {}'.format(vendor_ramdisk_table_size))
+        print('vendor ramdisk table: [')
+        for idx in range(vendor_ramdisk_table_entry_num):
+            entry_offset = vendor_ramdisk_table_offset + (
+                vendor_ramdisk_table_entry_size * idx)
+            args.boot_img.seek(entry_offset)
+            ramdisk_size = unpack('I', args.boot_img.read(4))[0]
+            ramdisk_offset = unpack('I', args.boot_img.read(4))[0]
+            ramdisk_type = unpack('I', args.boot_img.read(4))[0]
+            board_id_size = VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE
+            board_id = unpack('{}I'.format(board_id_size),
+                              args.boot_img.read(board_id_size * 4))
+
+            indent = lambda level: ' ' * 4 * level
+            ramdisk_name = 'vendor_ramdisk{}'.format(idx)
+            print(indent(1) + '{}: {{'.format(ramdisk_name))
+            print(indent(2) + 'size: {}'.format(ramdisk_size))
+            print(indent(2) + 'offset: {}'.format(ramdisk_offset))
+            print(indent(2) + 'type: {:#x}'.format(ramdisk_type))
+            print(indent(2) + 'board_id: [')
+            stride = 4
+            for row_idx in range(0, len(board_id), stride):
+                row = board_id[row_idx:row_idx + stride]
+                print(indent(3) + ' '.join('{:#010x},'.format(e) for e in row))
+            print(indent(2) + ']')
+            print(indent(1) + '}')
+            image_info_list.append((ramdisk_offset_base + ramdisk_offset,
+                                    ramdisk_size, ramdisk_name))
+        print(']')
+    else:
+        image_info_list.append((ramdisk_offset_base, ramdisk_size, 'vendor_ramdisk'))
 
     dtb_offset = page_size * (num_boot_header_pages + num_boot_ramdisk_pages
                              ) # header + vendor_ramdisk
@@ -224,8 +271,8 @@ def unpack_image(args):
 def parse_cmdline():
     """parse command line arguments"""
     parser = ArgumentParser(
-        description='Unpacks boot.img/recovery.img, extracts the kernel,'
-        'ramdisk, second bootloader, recovery dtbo and dtb')
+        description='Unpacks boot.img/recovery.img/vendor_boot.img, extracts '
+        'the kernel, ramdisk, second bootloader, recovery dtbo and dtb')
     parser.add_argument(
         '--boot_img',
         help='path to boot image',
