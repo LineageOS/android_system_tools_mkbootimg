@@ -33,6 +33,7 @@
 #define VENDOR_RAMDISK_TYPE_PLATFORM 1
 #define VENDOR_RAMDISK_TYPE_RECOVERY 2
 #define VENDOR_RAMDISK_TYPE_DLKM 3
+#define VENDOR_RAMDISK_NAME_SIZE 32
 #define VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE 16
 
 /* When a boot header is of version 0, the structure of boot image is as
@@ -350,7 +351,7 @@ struct vendor_boot_img_hdr_v3 {
  * one after another, and vendor_ramdisk_size is the size of the section, which
  * is the total size of all the ramdisks included in the vendor boot image.
  *
- * The vendor ramdisk table holds the size, offset, type and hardware
+ * The vendor ramdisk table holds the size, offset, type, name and hardware
  * identifiers of each ramdisk. The type field denotes the type of its content.
  * The hardware identifiers are specified in the board_id field in each table
  * entry. The board_id field is consist of a vector of unsigned integer words,
@@ -390,6 +391,7 @@ struct vendor_ramdisk_table_entry_v4 {
     uint32_t ramdisk_size; /* size in bytes for the ramdisk image */
     uint32_t ramdisk_offset; /* offset to the ramdisk image in vendor ramdisk section */
     uint32_t ramdisk_type; /* type of the ramdisk */
+    uint8_t ramdisk_name[VENDOR_RAMDISK_NAME_SIZE]; /* asciiz ramdisk name */
 
     // Hardware identifiers describing the board, soc or platform which this
     // ramdisk is intended to be loaded on.

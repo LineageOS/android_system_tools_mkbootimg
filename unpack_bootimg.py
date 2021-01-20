@@ -24,6 +24,7 @@ from struct import unpack
 import os
 
 BOOT_IMAGE_HEADER_V3_PAGESIZE = 4096
+VENDOR_RAMDISK_NAME_SIZE = 32
 VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE = 16
 
 def create_out_dir(dir_path):
@@ -227,16 +228,19 @@ def unpack_vendor_bootimage(args):
             ramdisk_size = unpack('I', args.boot_img.read(4))[0]
             ramdisk_offset = unpack('I', args.boot_img.read(4))[0]
             ramdisk_type = unpack('I', args.boot_img.read(4))[0]
+            ramdisk_name = cstr(unpack('{}s'.format(VENDOR_RAMDISK_NAME_SIZE),
+                                       args.boot_img.read(VENDOR_RAMDISK_NAME_SIZE))[0].decode())
             board_id_size = VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE
             board_id = unpack('{}I'.format(board_id_size),
                               args.boot_img.read(board_id_size * 4))
 
             indent = lambda level: ' ' * 4 * level
-            ramdisk_name = 'vendor_ramdisk{}'.format(idx)
-            print(indent(1) + '{}: {{'.format(ramdisk_name))
+            output_ramdisk_name = 'vendor_ramdisk{}'.format(idx)
+            print(indent(1) + '{}: {{'.format(output_ramdisk_name))
             print(indent(2) + 'size: {}'.format(ramdisk_size))
             print(indent(2) + 'offset: {}'.format(ramdisk_offset))
             print(indent(2) + 'type: {:#x}'.format(ramdisk_type))
+            print(indent(2) + 'name: {}'.format(ramdisk_name))
             print(indent(2) + 'board_id: [')
             stride = 4
             for row_idx in range(0, len(board_id), stride):
@@ -245,7 +249,7 @@ def unpack_vendor_bootimage(args):
             print(indent(2) + ']')
             print(indent(1) + '}')
             image_info_list.append((ramdisk_offset_base + ramdisk_offset,
-                                    ramdisk_size, ramdisk_name))
+                                    ramdisk_size, output_ramdisk_name))
         print(']')
     else:
         image_info_list.append((ramdisk_offset_base, ramdisk_size, 'vendor_ramdisk'))
