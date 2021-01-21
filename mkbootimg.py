@@ -31,6 +31,7 @@ VENDOR_RAMDISK_TYPE_NONE = 0
 VENDOR_RAMDISK_TYPE_PLATFORM = 1
 VENDOR_RAMDISK_TYPE_RECOVERY = 2
 VENDOR_RAMDISK_TYPE_DLKM = 3
+VENDOR_RAMDISK_NAME_SIZE = 32
 VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE = 16
 
 def filesize(f):
@@ -94,7 +95,7 @@ def write_header_v3(args):
 def write_vendor_boot_header(args):
     VENDOR_BOOT_IMAGE_HEADER_V3_SIZE = 2112
     VENDOR_BOOT_IMAGE_HEADER_V4_SIZE = 2124
-    VENDOR_RAMDISK_TABLE_ENTRY_V4_SIZE = 76
+    VENDOR_RAMDISK_TABLE_ENTRY_V4_SIZE = 108
     BOOT_MAGIC = 'VNDRBOOT'.encode()
 
     if args.header_version > 3:
@@ -227,13 +228,14 @@ class VendorRamdiskTableBuilder:
 
     VendorRamdiskTableEntry = collections.namedtuple(
         'VendorRamdiskTableEntry',
-        ['ramdisk_path', 'ramdisk_size', 'ramdisk_offset', 'ramdisk_type', 'board_id'])
+        ['ramdisk_path', 'ramdisk_size', 'ramdisk_offset', 'ramdisk_type', 'ramdisk_name',
+         'board_id'])
 
     def __init__(self):
         self.entries = []
         self.ramdisk_total_size = 0
 
-    def add_entry(self, ramdisk_path, ramdisk_type=VENDOR_RAMDISK_TYPE_NONE, board_id=None):
+    def add_entry(self, ramdisk_path, ramdisk_type, ramdisk_name, board_id=None):
         if board_id is None:
             board_id = array.array('I', [0] * VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE)
         else:
@@ -245,7 +247,8 @@ class VendorRamdiskTableBuilder:
         with open(ramdisk_path, 'rb') as f:
             ramdisk_size = filesize(f)
         self.entries.append(self.VendorRamdiskTableEntry(
-            ramdisk_path, ramdisk_size, self.ramdisk_total_size, ramdisk_type, board_id))
+            ramdisk_path, ramdisk_size, self.ramdisk_total_size, ramdisk_type, ramdisk_name,
+            board_id))
         self.ramdisk_total_size += ramdisk_size
 
     def write_ramdisks_padded(self, fout, alignment):
@@ -259,6 +262,7 @@ class VendorRamdiskTableBuilder:
             fout.write(pack('I', entry.ramdisk_size))
             fout.write(pack('I', entry.ramdisk_offset))
             fout.write(pack('I', entry.ramdisk_type))
+            fout.write(pack('{}s'.format(VENDOR_RAMDISK_NAME_SIZE), entry.ramdisk_name.encode()))
             fout.write(entry.board_id)
         pad_file(fout, alignment)
 
@@ -319,6 +323,8 @@ def get_vendor_boot_v4_usage():
     return """vendor boot version 4 arguments:
   --ramdisk_type {none,platform,recovery,dlkm}
                         specify the type of the ramdisk
+  --ramdisk_name NAME
+                        specify the name of the ramdisk
   --board_id{0..15} NUMBER
                         specify the value of the board_id vector, defaults to 0
   --vendor_ramdisk_fragment VENDOR_RAMDISK_FILE
@@ -346,15 +352,20 @@ def parse_vendor_ramdisk_args(args, args_list):
     parser = ArgumentParser(add_help=False)
     parser.add_argument('--ramdisk_type', type=parse_vendor_ramdisk_type,
                         default=VENDOR_RAMDISK_TYPE_NONE)
+    parser.add_argument('--ramdisk_name', action=ValidateStrLenAction,
+                        maxlen=VENDOR_RAMDISK_NAME_SIZE, required=True)
     for i in range(VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE):
         parser.add_argument('--board_id{}'.format(i), type=parse_int, default=0)
     parser.add_argument(VENDOR_RAMDISK_FRAGMENT_OPTION, required=True)
 
     unknown_args = []
 
+    ramdisk_names = set()
     vendor_ramdisk_table_builder = VendorRamdiskTableBuilder()
     if args.vendor_ramdisk is not None:
-        vendor_ramdisk_table_builder.add_entry(args.vendor_ramdisk.name)
+        ramdisk_names.add('')
+        vendor_ramdisk_table_builder.add_entry(
+            args.vendor_ramdisk.name, VENDOR_RAMDISK_TYPE_NONE, '')
 
     while VENDOR_RAMDISK_FRAGMENT_OPTION in args_list:
         idx = args_list.index(VENDOR_RAMDISK_FRAGMENT_OPTION) + 2
@@ -367,9 +378,14 @@ def parse_vendor_ramdisk_args(args, args_list):
 
         ramdisk_path = ramdisk_args.vendor_ramdisk_fragment
         ramdisk_type = ramdisk_args.ramdisk_type
+        ramdisk_name = ramdisk_args.ramdisk_name
         board_id = [ramdisk_args_dict['board_id{}'.format(i)]
                     for i in range(VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE)]
-        vendor_ramdisk_table_builder.add_entry(ramdisk_path, ramdisk_type, board_id)
+
+        if ramdisk_name in ramdisk_names:
+            raise ValueError('Duplicated vendor ramdisk name: "{}"'.format(ramdisk_name))
+        ramdisk_names.add(ramdisk_name)
+        vendor_ramdisk_table_builder.add_entry(ramdisk_path, ramdisk_type, ramdisk_name, board_id)
 
     if len(args_list) > 0:
         unknown_args.extend(args_list)

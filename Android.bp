@@ -66,3 +66,27 @@ python_binary_host {
         "unpack_bootimg.py",
     ],
 }
+
+python_test_host {
+    name: "mkbootimg_test",
+    main: "tests/mkbootimg_test.py",
+    srcs: [
+        "tests/mkbootimg_test.py",
+    ],
+    required: [
+        "mkbootimg",
+        "unpack_bootimg",
+    ],
+    test_suites: [
+        "general-tests",
+    ],
+    version: {
+        py2: {
+            enabled: false,
+        },
+        py3: {
+            enabled: true,
+            embedded_launcher: true,
+        },
+    },
+}
