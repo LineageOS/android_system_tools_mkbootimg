@@ -51,6 +51,20 @@ python_defaults {
     },
 }
 
+python_defaults {
+    name: "mkbootimg_py3_defaults",
+
+    version: {
+        py2: {
+            enabled: false,
+        },
+        py3: {
+            enabled: true,
+            embedded_launcher: true,
+        },
+    },
+}
+
 python_binary_host {
     name: "mkbootimg",
     defaults: ["mkbootimg_defaults"],
@@ -67,8 +81,26 @@ python_binary_host {
     ],
 }
 
+
+python_binary_host {
+    name: "repack_bootimg",
+    defaults: ["mkbootimg_py3_defaults"],
+    srcs: [
+        "repack_bootimg.py",
+    ],
+    required: [
+        "lz4",
+        "minigzip",
+        "mkbootfs",
+        "mkbootimg",
+        "toybox",
+        "unpack_bootimg",
+    ],
+}
+
 python_test_host {
     name: "mkbootimg_test",
+    defaults: ["mkbootimg_py3_defaults"],
     main: "tests/mkbootimg_test.py",
     srcs: [
         "tests/mkbootimg_test.py",
@@ -80,13 +112,4 @@ python_test_host {
     test_suites: [
         "general-tests",
     ],
-    version: {
-        py2: {
-            enabled: false,
-        },
-        py3: {
-            enabled: true,
-            embedded_launcher: true,
-        },
-    },
 }
