@@ -21,11 +21,14 @@ Extracts the kernel, ramdisk, second bootloader, dtb and recovery dtbo images.
 from __future__ import print_function
 from argparse import ArgumentParser, FileType
 from struct import unpack
+import json
 import os
 
 BOOT_IMAGE_HEADER_V3_PAGESIZE = 4096
 VENDOR_RAMDISK_NAME_SIZE = 32
 VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE = 16
+
+MKBOOTIMG_ARGS_FILE = 'mkbootimg_args.json'
 
 def create_out_dir(dir_path):
     """creates a directory 'dir_path' if it does not exist"""
@@ -71,6 +74,19 @@ def print_os_version_patch_level(value):
     print('os patch level: %s' % format_os_patch_level(os_patch_level))
 
 
+def get_boot_image_v3_args(header_version, os_version_patch_level, cmdline):
+    """Returns a dict of arguments to be used in mkbootimg.py later."""
+    mkbootimg_args = {}
+    mkbootimg_args['header_version'] = str(header_version)
+    os_version = os_version_patch_level >> 11
+    os_patch_level = os_version_patch_level & ((1<<11) - 1)
+    mkbootimg_args['os_version'] = format_os_version(os_version)
+    mkbootimg_args['os_patch_level'] = format_os_patch_level(os_patch_level)
+    mkbootimg_args['cmdline'] = cmdline
+
+    return mkbootimg_args
+
+
 def unpack_bootimage(args):
     """extracts kernel, ramdisk, second bootloader and recovery dtbo"""
     kernel_ramdisk_second_info = unpack('9I', args.boot_img.read(9 * 4))
@@ -100,6 +116,15 @@ def unpack_bootimage(args):
     else:
         cmdline = cstr(unpack('1536s', args.boot_img.read(1536))[0].decode())
         print('command line args: %s' % cmdline)
+        # Saves the arguments to be reused in mkbootimg.py later.
+        # Only do this for version >= 3, because the major usage is to repack
+        # a boot-debug.img or vendor_boot-debug.img in version 3 or later.
+        mkbootimg_args = get_boot_image_v3_args(
+            version,
+            kernel_ramdisk_second_info[2], # os_version and patch_level
+            cmdline)
+        with open(os.path.join(args.out, MKBOOTIMG_ARGS_FILE), 'w') as f:
+            json.dump(mkbootimg_args, f, sort_keys=True, indent=4)
 
     if version < 3:
         args.boot_img.read(32)  # ignore SHA
@@ -174,15 +199,46 @@ def unpack_bootimage(args):
                       os.path.join(args.out, image_info[2]))
 
 
+def get_vendor_boot_image_v3_args(header_version, page_size, kernel_address,
+                                  ramdisk_address, cmdline, tags_load_address,
+                                  product_name, dtb_load_address):
+    """Returns a dict of arguments to be used in mkbootimg.py later."""
+    mkbootimg_args = {}
+    mkbootimg_args['header_version'] = str(header_version)
+    # The type of pagesize is uint32_t, using '0xFFFFFFFF' as the output format.
+    mkbootimg_args['pagesize'] = '{:#010x}'.format(page_size)
+
+    # Kernel address is base + kernel_offset in mkbootimg.py.
+    # However, we don't know the value of 'base' when unpack a vendor_boot.img
+    # in this script. So always set 'base' to be zero and 'kernel_offset' to
+    # be kernel address. Same for 'ramdisk_offset', 'tags_offset' and
+    # 'dtb_offset'.
+    # The following types are uint32_t, using '0xFFFFFFFF' as the output format.
+    mkbootimg_args['base'] = '{:#010x}'.format(0)
+    mkbootimg_args['kernel_offset'] = '{:#010x}'.format(kernel_address)
+    mkbootimg_args['ramdisk_offset'] = '{:#010x}'.format(ramdisk_address)
+    mkbootimg_args['tags_offset'] = '{:#010x}'.format(tags_load_address)
+    # The type of dtb_offset is uint64_t, using '0xFFFFFFFFEEEEEEEE' as
+    # the output format.
+    mkbootimg_args['dtb_offset'] = '{:#018x}'.format(dtb_load_address)
+
+    mkbootimg_args['vendor_cmdline'] = cmdline
+    mkbootimg_args['board'] = product_name
+
+    return mkbootimg_args
+
+
 def unpack_vendor_bootimage(args):
     kernel_ramdisk_info = unpack('5I', args.boot_img.read(5 * 4))
     header_version = kernel_ramdisk_info[0]
     page_size = kernel_ramdisk_info[1]
+    kernel_address = kernel_ramdisk_info[2]
+    ramdisk_address = kernel_ramdisk_info[3]
     ramdisk_size = kernel_ramdisk_info[4]
     print('vendor boot image header version: %s' % header_version)
     print('page size: %#x' % page_size)
-    print('kernel load address: %#x' % kernel_ramdisk_info[2])
-    print('ramdisk load address: %#x' % kernel_ramdisk_info[3])
+    print('kernel load address: %#x' % kernel_address)
+    print('ramdisk load address: %#x' % ramdisk_address)
     if header_version > 3:
         print('vendor ramdisk total size: %s' % ramdisk_size)
     else:
@@ -204,6 +260,15 @@ def unpack_vendor_bootimage(args):
     print('dtb size: %s' % dtb_size)
     dtb_load_address = unpack('Q', args.boot_img.read(8))[0]
     print('dtb address: %#x' % dtb_load_address)
+
+    # Saves the arguments to be reused in mkbootimg.py later.
+    # TODO(bowgotsai): support for multiple vendor ramdisk (vendor boot v4).
+    mkbootimg_args = get_vendor_boot_image_v3_args(
+        header_version, page_size, kernel_address, ramdisk_address,
+        cmdline, tags_load_address, product_name, dtb_load_address)
+
+    with open(os.path.join(args.out, MKBOOTIMG_ARGS_FILE), 'w') as f:
+        json.dump(mkbootimg_args, f, sort_keys=True, indent=4)
 
     # The first pages contain the boot header
     num_boot_header_pages = get_number_of_pages(header_size, page_size)
