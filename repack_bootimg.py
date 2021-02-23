@@ -210,7 +210,8 @@ class BootImage:
         """Returns the previous mkbootimg args from mkbootimg_args.json file."""
         # Loads the saved mkbootimg_args.json from previous unpack_bootimg.
         command = []
-        mkbootimg_config = os.path.join(self._bootimg_dir, 'mkbootimg_args.json')
+        mkbootimg_config = os.path.join(
+            self._bootimg_dir, 'mkbootimg_args.json')
         with open (mkbootimg_config) as config:
             mkbootimg_args = json.load(config)
             for argname, value in mkbootimg_args.items():
