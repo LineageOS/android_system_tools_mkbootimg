@@ -42,22 +42,6 @@ cc_library {
 
 python_defaults {
     name: "mkbootimg_defaults",
-
-    version: {
-        py2: {
-            enabled: true,
-            embedded_launcher: true,
-        },
-        py3: {
-            enabled: false,
-            embedded_launcher: false,
-        },
-    },
-}
-
-python_defaults {
-    name: "mkbootimg_py3_defaults",
-
     version: {
         py2: {
             enabled: false,
@@ -88,7 +72,7 @@ python_binary_host {
 
 python_binary_host {
     name: "repack_bootimg",
-    defaults: ["mkbootimg_py3_defaults"],
+    defaults: ["mkbootimg_defaults"],
     srcs: [
         "repack_bootimg.py",
     ],
@@ -104,7 +88,7 @@ python_binary_host {
 
 python_test_host {
     name: "mkbootimg_test",
-    defaults: ["mkbootimg_py3_defaults"],
+    defaults: ["mkbootimg_defaults"],
     main: "tests/mkbootimg_test.py",
     srcs: [
         "tests/mkbootimg_test.py",
