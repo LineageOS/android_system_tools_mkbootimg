@@ -1,4 +1,5 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+#
 # Copyright 2018, The Android Open Source Project
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,12 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""unpacks the bootimage.
+"""Unpacks the boot image.
 
 Extracts the kernel, ramdisk, second bootloader, dtb and recovery dtbo images.
 """
 
-from __future__ import print_function
 from argparse import ArgumentParser, FileType
 from struct import unpack
 import json
@@ -29,6 +29,7 @@ VENDOR_RAMDISK_NAME_SIZE = 32
 VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE = 16
 
 MKBOOTIMG_ARGS_FILE = 'mkbootimg_args.json'
+
 
 def create_out_dir(dir_path):
     """creates a directory 'dir_path' if it does not exist"""
@@ -97,7 +98,8 @@ def unpack_bootimage(args):
         print('ramdisk size: %s' % kernel_ramdisk_second_info[2])
         print('ramdisk load address: %#x' % kernel_ramdisk_second_info[3])
         print('second bootloader size: %s' % kernel_ramdisk_second_info[4])
-        print('second bootloader load address: %#x' % kernel_ramdisk_second_info[5])
+        print('second bootloader load address: %#x' %
+              kernel_ramdisk_second_info[5])
         print('kernel tags load address: %#x' % kernel_ramdisk_second_info[6])
         print('page size: %s' % kernel_ramdisk_second_info[7])
         print_os_version_patch_level(unpack('I', args.boot_img.read(1 * 4))[0])
@@ -186,11 +188,11 @@ def unpack_bootimage(args):
                                 'recovery_dtbo'))
     if dtb_size > 0:
         num_second_pages = get_number_of_pages(second_size, page_size)
-        num_recovery_dtbo_pages = get_number_of_pages(recovery_dtbo_size, page_size)
+        num_recovery_dtbo_pages = get_number_of_pages(
+            recovery_dtbo_size, page_size)
         dtb_offset = page_size * (
-            num_header_pages + num_kernel_pages + num_ramdisk_pages + num_second_pages +
-            num_recovery_dtbo_pages
-        )
+            num_header_pages + num_kernel_pages + num_ramdisk_pages +
+            num_second_pages + num_recovery_dtbo_pages)
 
         image_info_list.append((dtb_offset, dtb_size, 'dtb'))
 
@@ -293,8 +295,9 @@ def unpack_vendor_bootimage(args):
             ramdisk_size = unpack('I', args.boot_img.read(4))[0]
             ramdisk_offset = unpack('I', args.boot_img.read(4))[0]
             ramdisk_type = unpack('I', args.boot_img.read(4))[0]
-            ramdisk_name = cstr(unpack('{}s'.format(VENDOR_RAMDISK_NAME_SIZE),
-                                       args.boot_img.read(VENDOR_RAMDISK_NAME_SIZE))[0].decode())
+            ramdisk_name = cstr(unpack(
+                '{}s'.format(VENDOR_RAMDISK_NAME_SIZE),
+                args.boot_img.read(VENDOR_RAMDISK_NAME_SIZE))[0].decode())
             board_id_size = VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE
             board_id = unpack('{}I'.format(board_id_size),
                               args.boot_img.read(board_id_size * 4))
@@ -317,7 +320,8 @@ def unpack_vendor_bootimage(args):
                                     ramdisk_size, output_ramdisk_name))
         print(']')
     else:
-        image_info_list.append((ramdisk_offset_base, ramdisk_size, 'vendor_ramdisk'))
+        image_info_list.append(
+            (ramdisk_offset_base, ramdisk_size, 'vendor_ramdisk'))
 
     dtb_offset = page_size * (num_boot_header_pages + num_boot_ramdisk_pages
                              ) # header + vendor_ramdisk
@@ -331,9 +335,9 @@ def unpack_vendor_bootimage(args):
 def unpack_image(args):
     boot_magic = unpack('8s', args.boot_img.read(8))[0].decode()
     print('boot_magic: %s' % boot_magic)
-    if boot_magic == "ANDROID!":
+    if boot_magic == 'ANDROID!':
         unpack_bootimage(args)
-    elif boot_magic == "VNDRBOOT":
+    elif boot_magic == 'VNDRBOOT':
         unpack_vendor_bootimage(args)
 
 
