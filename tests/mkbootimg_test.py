@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Tests mkbootimg and unpack_bootimg."""
+
 import json
 import os
 import subprocess
@@ -55,8 +57,12 @@ class MkbootimgTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_out_dir:
             vendor_boot_img = os.path.join(temp_out_dir, 'vendor_boot.img')
             dtb = create_blank_file(os.path.join(temp_out_dir, 'dtb'), 0x1000)
-            ramdisk1 = create_blank_file(os.path.join(temp_out_dir, 'ramdisk1'), 0x1000)
-            ramdisk2 = create_blank_file(os.path.join(temp_out_dir, 'ramdisk2'), 0x2000)
+            ramdisk1 = create_blank_file(os.path.join(temp_out_dir, 'ramdisk1'),
+                0x1000)
+            ramdisk2 = create_blank_file(os.path.join(temp_out_dir, 'ramdisk2'),
+                0x2000)
+            bootconfig = create_blank_file(os.path.join(temp_out_dir,
+                'bootconfig'), 0x1000)
             mkbootimg_cmds = [
                 'mkbootimg',
                 '--header_version', '4',
@@ -70,6 +76,7 @@ class MkbootimgTest(unittest.TestCase):
                 '--board_id0', '0xC0FFEE',
                 '--board_id15', '0x15151515',
                 '--vendor_ramdisk_fragment', ramdisk2,
+                '--vendor_bootconfig', bootconfig,
             ]
             unpack_bootimg_cmds = [
                 'unpack_bootimg',
@@ -92,6 +99,7 @@ class MkbootimgTest(unittest.TestCase):
                 '0x00000000, 0x00000000, 0x00000000, 0x00000000,',
                 '0x00000000, 0x00000000, 0x00000000, 0x00000000,',
                 '0x00000000, 0x00000000, 0x00000000, 0x15151515,',
+                'vendor bootconfig size: 4096',
             ]
 
             subprocess.run(mkbootimg_cmds, check=True)
@@ -113,8 +121,10 @@ class MkbootimgTest(unittest.TestCase):
         """Tests mkbootimg_args.json when unpacking a boot image version 3."""
         with tempfile.TemporaryDirectory() as temp_out_dir:
             boot_img = os.path.join(temp_out_dir, 'boot.img')
-            kernel = create_blank_file(os.path.join(temp_out_dir, 'kernel'), 0x1000)
-            ramdisk = create_blank_file(os.path.join(temp_out_dir, 'ramdisk'), 0x1000)
+            kernel = create_blank_file(os.path.join(temp_out_dir, 'kernel'),
+                0x1000)
+            ramdisk = create_blank_file(os.path.join(temp_out_dir, 'ramdisk'),
+                0x1000)
             mkbootimg_cmds = [
                 'mkbootimg',
                 '--header_version', '3',
@@ -148,11 +158,14 @@ class MkbootimgTest(unittest.TestCase):
                                  expected_mkbootimg_args)
 
     def test_unpack_vendor_boot_image_v3_json_args(self):
-        """Tests mkbootimg_args.json when unpacking a vendor boot image version 3."""
+        """Tests mkbootimg_args.json when unpacking a vendor boot image version
+        3.
+        """
         with tempfile.TemporaryDirectory() as temp_out_dir:
             vendor_boot_img = os.path.join(temp_out_dir, 'vendor_boot.img')
             dtb = create_blank_file(os.path.join(temp_out_dir, 'dtb'), 0x1000)
-            ramdisk = create_blank_file(os.path.join(temp_out_dir, 'ramdisk'), 0x1000)
+            ramdisk = create_blank_file(os.path.join(temp_out_dir, 'ramdisk'),
+                0x1000)
             mkbootimg_cmds = [
                 'mkbootimg',
                 '--header_version', '3',
