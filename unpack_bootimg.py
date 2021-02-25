@@ -284,6 +284,9 @@ def unpack_vendor_bootimage(args):
         vendor_ramdisk_table_size = unpack('I', args.boot_img.read(4))[0]
         vendor_ramdisk_table_entry_num = unpack('I', args.boot_img.read(4))[0]
         vendor_ramdisk_table_entry_size = unpack('I', args.boot_img.read(4))[0]
+        num_vendor_ramdisk_table_pages = get_number_of_pages(
+            vendor_ramdisk_table_size, page_size)
+        vendor_bootconfig_size = unpack('I', args.boot_img.read(4))[0]
         vendor_ramdisk_table_offset = page_size * (
             num_boot_header_pages + num_boot_ramdisk_pages + num_boot_dtb_pages)
         print('vendor ramdisk table size: {}'.format(vendor_ramdisk_table_size))
@@ -319,6 +322,12 @@ def unpack_vendor_bootimage(args):
             image_info_list.append((ramdisk_offset_base + ramdisk_offset,
                                     ramdisk_size, output_ramdisk_name))
         print(']')
+        bootconfig_offset = page_size * (num_boot_header_pages
+            + num_boot_ramdisk_pages + num_boot_dtb_pages
+            + num_vendor_ramdisk_table_pages)
+        image_info_list.append((bootconfig_offset, vendor_bootconfig_size,
+            'bootconfig'))
+        print('vendor bootconfig size: {}'.format(vendor_bootconfig_size))
     else:
         image_info_list.append(
             (ramdisk_offset_base, ramdisk_size, 'vendor_ramdisk'))

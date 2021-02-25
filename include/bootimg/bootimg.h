@@ -335,11 +335,14 @@ struct vendor_boot_img_hdr_v3 {
  * +------------------------+
  * | vendor ramdisk table   | r pages
  * +------------------------+
+ * | bootconfig             | s pages
+ * +------------------------+
  *
- * o = (2124 + page_size - 1) / page_size
+ * o = (2128 + page_size - 1) / page_size
  * p = (vendor_ramdisk_size + page_size - 1) / page_size
  * q = (dtb_size + page_size - 1) / page_size
  * r = (vendor_ramdisk_table_size + page_size - 1) / page_size
+ * s = (vendor_bootconfig_size + page_size - 1) / page_size
  *
  * Note that in version 4 of the vendor boot image, multiple vendor ramdisks can
  * be included in the vendor boot image. The bootloader can select a subset of
@@ -364,6 +367,12 @@ struct vendor_boot_img_hdr_v3 {
  *    - VENDOR_RAMDISK_TYPE_DLKM ramdisk contains dynamic loadable kernel
  *      modules.
  *
+ * Version 4 of the vendor boot image also adds a bootconfig section to the end
+ * of the image. This section contains Boot Configuration parameters known at
+ * build time. The bootloader is responsible for placing this section directly
+ * after the generic ramdisk, followed by the bootconfig trailer, before
+ * entering the kernel.
+ *
  * 0. all entities in the boot image are 4096-byte aligned in flash, all
  *    entities in the vendor boot image are page_size (determined by the vendor
  *    and specified in the vendor boot image header) aligned in flash
@@ -373,8 +382,10 @@ struct vendor_boot_img_hdr_v3 {
  * 3. load the vendor ramdisks at ramdisk_addr
  * 4. load the generic ramdisk immediately following the vendor ramdisk in
  *    memory
- * 5. set up registers for kernel entry as required by your architecture
- * 6. if the platform has a second stage bootloader jump to it (must be
+ * 5. load the bootconfig immediately following the generic ramdisk. Add
+ *    additional bootconfig parameters followed by the bootconfig trailer.
+ * 6. set up registers for kernel entry as required by your architecture
+ * 7. if the platform has a second stage bootloader jump to it (must be
  *    contained outside boot and vendor boot partitions), otherwise
  *    jump to kernel_addr
  */
@@ -385,6 +396,7 @@ struct vendor_boot_img_hdr_v4 : public vendor_boot_img_hdr_v3 {
     uint32_t vendor_ramdisk_table_size; /* size in bytes for the vendor ramdisk table */
     uint32_t vendor_ramdisk_table_entry_num; /* number of entries in the vendor ramdisk table */
     uint32_t vendor_ramdisk_table_entry_size; /* size in bytes for a vendor ramdisk table entry */
+    uint32_t bootconfig_size; /* size in bytes for the bootconfig section */
 } __attribute__((packed));
 
 struct vendor_ramdisk_table_entry_v4 {
