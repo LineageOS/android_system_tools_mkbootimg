@@ -16,7 +16,8 @@
 
 """Creates the boot image."""
 
-from argparse import ArgumentParser, FileType, RawDescriptionHelpFormatter
+from argparse import (ArgumentParser, ArgumentTypeError,
+                      FileType, RawDescriptionHelpFormatter)
 from hashlib import sha1
 from os import fstat
 from struct import pack
@@ -119,7 +120,7 @@ def write_header_v3_and_above(args):
     # version of boot image header
     args.output.write(pack('I', args.header_version))
     args.output.write(pack(f'{BOOT_ARGS_SIZE + BOOT_EXTRA_ARGS_SIZE}s',
-                           args.cmdline.encode()))
+                           args.cmdline))
     if args.header_version >= 4:
         # The signature used to verify boot image v4.
         args.output.write(pack('I', BOOT_IMAGE_V4_SIGNATURE_SIZE))
@@ -150,12 +151,11 @@ def write_vendor_boot_header(args):
     # ramdisk size in bytes
     args.vendor_boot.write(pack('I', vendor_ramdisk_size))
     args.vendor_boot.write(pack(f'{VENDOR_BOOT_ARGS_SIZE}s',
-                                args.vendor_cmdline.encode()))
+                                args.vendor_cmdline))
     # kernel tags physical load address
     args.vendor_boot.write(pack('I', args.base + args.tags_offset))
     # asciiz product name
-    args.vendor_boot.write(pack(f'{VENDOR_BOOT_NAME_SIZE}s',
-                                args.board.encode()))
+    args.vendor_boot.write(pack(f'{VENDOR_BOOT_NAME_SIZE}s', args.board))
 
     # header size in bytes
     args.vendor_boot.write(pack('I', vendor_boot_header_size))
@@ -213,9 +213,8 @@ def write_header(args):
     # os version and patch level
     args.output.write(pack('I', (args.os_version << 11) | args.os_patch_level))
     # asciiz product name
-    args.output.write(pack(f'{BOOT_NAME_SIZE}s', args.board.encode()))
-    args.output.write(pack(f'{BOOT_ARGS_SIZE}s',
-                           args.cmdline[:BOOT_ARGS_SIZE].encode()))
+    args.output.write(pack(f'{BOOT_NAME_SIZE}s', args.board))
+    args.output.write(pack(f'{BOOT_ARGS_SIZE}s', args.cmdline))
 
     sha = sha1()
     update_sha(sha, args.kernel)
@@ -230,8 +229,7 @@ def write_header(args):
     img_id = pack('32s', sha.digest())
 
     args.output.write(img_id)
-    args.output.write(pack(f'{BOOT_EXTRA_ARGS_SIZE}s',
-                           args.cmdline[BOOT_ARGS_SIZE:].encode()))
+    args.output.write(pack(f'{BOOT_EXTRA_ARGS_SIZE}s', args.extra_cmdline))
 
     if args.header_version > 0:
         if args.recovery_dtbo:
@@ -263,20 +261,27 @@ def write_header(args):
     return img_id
 
 
-class AssertString:
-    """Asserts properties of a string."""
+class AsciizBytes:
+    """Parses a string and encodes it as an asciiz bytes object.
 
-    def __init__(self, maxlen):
-        self.maxlen = maxlen
+    >>> AsciizBytes(bufsize=4)('foo')
+    b'foo\\x00'
+    >>> AsciizBytes(bufsize=4)('foob')
+    Traceback (most recent call last):
+        ...
+    argparse.ArgumentTypeError: Encoded asciiz length exceeded: max 4, got 5
+    """
 
-    def __repr__(self):
-        return f'{self.__class__.__name__}(maxlen={self.maxlen})'
+    def __init__(self, bufsize):
+        self.bufsize = bufsize
 
     def __call__(self, arg):
-        if len(arg) > self.maxlen:
-            raise ValueError(
-                f'String length exceeded: max {self.maxlen}, got {len(arg)}')
-        return arg
+        arg_bytes = arg.encode() + b'\x00'
+        if len(arg_bytes) > self.bufsize:
+            raise ArgumentTypeError(
+                'Encoded asciiz length exceeded: '
+                f'max {self.bufsize}, got {len(arg_bytes)}')
+        return arg_bytes
 
 
 class VendorRamdiskTableBuilder:
@@ -295,8 +300,16 @@ class VendorRamdiskTableBuilder:
     def __init__(self):
         self.entries = []
         self.ramdisk_total_size = 0
+        self.ramdisk_names = set()
 
     def add_entry(self, ramdisk_path, ramdisk_type, ramdisk_name, board_id):
+        # Strip any trailing null for simple comparison.
+        stripped_ramdisk_name = ramdisk_name.rstrip(b'\x00')
+        if stripped_ramdisk_name in self.ramdisk_names:
+            raise ValueError(
+                f'Duplicated vendor ramdisk name: {stripped_ramdisk_name}')
+        self.ramdisk_names.add(stripped_ramdisk_name)
+
         if board_id is None:
             board_id = array.array(
                 'I', [0] * VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE)
@@ -325,7 +338,7 @@ class VendorRamdiskTableBuilder:
             fout.write(pack('I', entry.ramdisk_offset))
             fout.write(pack('I', entry.ramdisk_type))
             fout.write(pack(f'{VENDOR_RAMDISK_NAME_SIZE}s',
-                            entry.ramdisk_name.encode()))
+                            entry.ramdisk_name))
             fout.write(entry.board_id)
         pad_file(fout, alignment)
 
@@ -414,7 +427,7 @@ def parse_vendor_ramdisk_args(args, args_list):
     parser.add_argument('--ramdisk_type', type=parse_vendor_ramdisk_type,
                         default=VENDOR_RAMDISK_TYPE_NONE)
     parser.add_argument('--ramdisk_name',
-                        type=AssertString(maxlen=VENDOR_RAMDISK_NAME_SIZE),
+                        type=AsciizBytes(bufsize=VENDOR_RAMDISK_NAME_SIZE),
                         required=True)
     for i in range(VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE):
         parser.add_argument(f'--board_id{i}', type=parse_int, default=0)
@@ -422,12 +435,10 @@ def parse_vendor_ramdisk_args(args, args_list):
 
     unknown_args = []
 
-    ramdisk_names = set()
     vendor_ramdisk_table_builder = VendorRamdiskTableBuilder()
     if args.vendor_ramdisk is not None:
-        ramdisk_names.add('')
         vendor_ramdisk_table_builder.add_entry(
-            args.vendor_ramdisk.name, VENDOR_RAMDISK_TYPE_NONE, '', None)
+            args.vendor_ramdisk.name, VENDOR_RAMDISK_TYPE_NONE, b'', None)
 
     while PARSER_ARGUMENT_VENDOR_RAMDISK_FRAGMENT in args_list:
         idx = args_list.index(PARSER_ARGUMENT_VENDOR_RAMDISK_FRAGMENT) + 2
@@ -443,11 +454,6 @@ def parse_vendor_ramdisk_args(args, args_list):
         ramdisk_name = ramdisk_args.ramdisk_name
         board_id = [ramdisk_args_dict[f'board_id{i}']
                     for i in range(VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE)]
-
-        if ramdisk_name in ramdisk_names:
-            raise ValueError(
-                f'Duplicated vendor ramdisk name: "{ramdisk_name}"')
-        ramdisk_names.add(ramdisk_name)
         vendor_ramdisk_table_builder.add_entry(ramdisk_path, ramdisk_type,
                                                ramdisk_name, board_id)
 
@@ -463,6 +469,17 @@ def parse_vendor_ramdisk_args(args, args_list):
 
 
 def parse_cmdline():
+    version_parser = ArgumentParser(add_help=False)
+    version_parser.add_argument('--header_version', type=parse_int, default=0)
+    if version_parser.parse_known_args()[0].header_version < 3:
+        # For boot header v0 to v2, the kernel commandline field is split into
+        # two fields, cmdline and extra_cmdline. Both fields are asciiz strings,
+        # so we minus one here to ensure the encoded string plus the
+        # null-terminator can fit in the buffer size.
+        cmdline_size = BOOT_ARGS_SIZE + BOOT_EXTRA_ARGS_SIZE - 1
+    else:
+        cmdline_size = BOOT_ARGS_SIZE + BOOT_EXTRA_ARGS_SIZE
+
     parser = ArgumentParser(formatter_class=RawDescriptionHelpFormatter,
                             epilog=get_vendor_boot_v4_usage())
     parser.add_argument('--kernel', type=FileType('rb'),
@@ -478,13 +495,12 @@ def parse_cmdline():
     dtbo_group.add_argument('--recovery_acpio', type=FileType('rb'),
                             metavar='RECOVERY_ACPIO', dest='recovery_dtbo',
                             help='path to the recovery ACPIO')
-    parser.add_argument('--cmdline', type=AssertString(maxlen=1536), default='',
-                        help='extra arguments to be passed on the kernel '
-                        'command line')
+    parser.add_argument('--cmdline', type=AsciizBytes(bufsize=cmdline_size),
+                        default='', help='kernel command line arguments')
     parser.add_argument('--vendor_cmdline',
-                        type=AssertString(maxlen=2048), default='',
-                        help='kernel command line arguments contained in '
-                        'vendor boot')
+                        type=AsciizBytes(bufsize=VENDOR_BOOT_ARGS_SIZE),
+                        default='',
+                        help='vendor boot kernel command line arguments')
     parser.add_argument('--base', type=parse_int, default=0x10000000,
                         help='base address')
     parser.add_argument('--kernel_offset', type=parse_int, default=0x00008000,
@@ -502,8 +518,8 @@ def parse_cmdline():
                         default=0, help='operating system patch level')
     parser.add_argument('--tags_offset', type=parse_int, default=0x00000100,
                         help='tags offset')
-    parser.add_argument('--board', type=AssertString(maxlen=16), default='',
-                        help='board name')
+    parser.add_argument('--board', type=AsciizBytes(bufsize=BOOT_NAME_SIZE),
+                        default='', help='board name')
     parser.add_argument('--pagesize', type=parse_int,
                         choices=[2**i for i in range(11, 15)], default=2048,
                         help='page size')
@@ -531,6 +547,13 @@ def parse_cmdline():
         extra_args = parse_vendor_ramdisk_args(args, extra_args)
     if len(extra_args) > 0:
         raise ValueError(f'Unrecognized arguments: {extra_args}')
+
+    if args.header_version < 3:
+        args.extra_cmdline = args.cmdline[BOOT_ARGS_SIZE-1:]
+        args.cmdline = args.cmdline[:BOOT_ARGS_SIZE-1] + b'\x00'
+        assert len(args.cmdline) <= BOOT_ARGS_SIZE
+        assert len(args.extra_cmdline) <= BOOT_EXTRA_ARGS_SIZE
+
     return args
 
 
