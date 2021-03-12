@@ -164,6 +164,11 @@ def unpack_bootimage(args):
     else:
         dtb_size = 0
 
+    if version >= 4:
+        boot_signature_size = unpack('I', args.boot_img.read(4))[0]
+        print('boot.img signature size: %s' % boot_signature_size)
+    else:
+        boot_signature_size = 0
 
     # The first page contains the boot header
     num_header_pages = 1
@@ -195,6 +200,15 @@ def unpack_bootimage(args):
             num_second_pages + num_recovery_dtbo_pages)
 
         image_info_list.append((dtb_offset, dtb_size, 'dtb'))
+
+    if boot_signature_size > 0:
+        # boot signature only exists in boot.img version >= v4.
+        # There are only kernel and ramdisk pages before the signature.
+        boot_signature_offset = page_size * (
+            num_header_pages + num_kernel_pages + num_ramdisk_pages)
+
+        image_info_list.append((boot_signature_offset, boot_signature_size,
+                                'boot_signature'))
 
     for image_info in image_info_list:
         extract_image(image_info[0], image_info[1], args.boot_img,

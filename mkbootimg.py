@@ -23,13 +23,18 @@ from struct import pack
 
 import array
 import collections
+import os
 import re
+import subprocess
+import tempfile
 
 BOOT_MAGIC = 'ANDROID!'
 BOOT_IMAGE_HEADER_V1_SIZE = 1648
 BOOT_IMAGE_HEADER_V2_SIZE = 1660
 BOOT_IMAGE_HEADER_V3_SIZE = 1580
 BOOT_IMAGE_HEADER_V3_PAGESIZE = 4096
+BOOT_IMAGE_HEADER_V4_SIZE = 1584
+BOOT_IMAGE_V4_SIGNATURE_SIZE = 4096
 
 VENDOR_BOOT_MAGIC = 'VNDRBOOT'
 VENDOR_BOOT_IMAGE_HEADER_V3_SIZE = 2112
@@ -86,7 +91,12 @@ def get_recovery_dtbo_offset(args):
     return dtbo_offset
 
 
-def write_header_v3(args):
+def write_header_v3_and_above(args):
+    if args.header_version > 3:
+        boot_header_size = BOOT_IMAGE_HEADER_V4_SIZE
+    else:
+        boot_header_size = BOOT_IMAGE_HEADER_V3_SIZE
+
     args.output.write(pack('8s', BOOT_MAGIC.encode()))
     # kernel size in bytes
     args.output.write(pack('I', filesize(args.kernel)))
@@ -94,12 +104,15 @@ def write_header_v3(args):
     args.output.write(pack('I', filesize(args.ramdisk)))
     # os version and patch level
     args.output.write(pack('I', (args.os_version << 11) | args.os_patch_level))
-    args.output.write(pack('I', BOOT_IMAGE_HEADER_V3_SIZE))
+    args.output.write(pack('I', boot_header_size))
     # reserved
     args.output.write(pack('4I', 0, 0, 0, 0))
     # version of boot image header
     args.output.write(pack('I', args.header_version))
     args.output.write(pack('1536s', args.cmdline.encode()))
+    if args.header_version >= 4:
+        # The signature used to verify boot image v4.
+        args.output.write(pack('I', BOOT_IMAGE_V4_SIGNATURE_SIZE))
     pad_file(args.output, BOOT_IMAGE_HEADER_V3_PAGESIZE)
 
 
@@ -158,7 +171,7 @@ def write_header(args):
         raise ValueError(
             f'Boot header version {args.header_version} not supported')
     if args.header_version in {3, 4}:
-        return write_header_v3(args)
+        return write_header_v3_and_above(args)
 
     ramdisk_load_address = ((args.base + args.ramdisk_offset)
                             if filesize(args.ramdisk) > 0 else 0)
@@ -485,6 +498,12 @@ def parse_cmdline():
                         help='boot image header version')
     parser.add_argument('-o', '--output', type=FileType('wb'),
                         help='output file name')
+    parser.add_argument('--gki_signing_algorithm',
+                        help='GKI signing algorithm to use')
+    parser.add_argument('--gki_signing_key',
+                        help='path to RSA private key file')
+    parser.add_argument('--gki_signing_extra_args',
+                        help='other hash arguments passed to avbtool')
     parser.add_argument('--vendor_boot', type=FileType('wb'),
                         help='vendor boot output file name')
     parser.add_argument('--vendor_ramdisk', type=FileType('rb'),
@@ -500,6 +519,55 @@ def parse_cmdline():
     return args
 
 
+def add_boot_image_signature(args, pagesize):
+    """Adds the boot image signature.
+
+    Note that the signature will only be verified in VTS to ensure a
+    generic boot.img is used. It will not be used by the device
+    bootloader at boot time. The bootloader should only verify
+    the boot vbmeta at the end of the boot partition (or in the top-level
+    vbmeta partition) via the Android Verified Boot process, when the
+    device boots.
+    """
+    args.output.flush()  # Flush the buffer for signature calculation.
+
+    # Appends zeros if the signing key is not specified.
+    if not args.gki_signing_key or not args.gki_signing_algorithm:
+        zeros = b'\x00' * BOOT_IMAGE_V4_SIGNATURE_SIZE
+        args.output.write(zeros)
+        pad_file(args.output, pagesize)
+        return
+
+    # Need to specify a value of --partition_size for avbtool to work.
+    # We use 64 MB below, but avbtool will not resize the boot image to
+    # this size because --do_not_append_vbmeta_image is also specified.
+    avbtool_cmd = [
+        'avbtool', 'add_hash_footer',
+        '--partition_name', 'boot',
+        '--partition_size', str(64 * 1024 * 1024),
+        '--image', args.output.name,
+        '--algorithm', args.gki_signing_algorithm,
+        '--key', args.gki_signing_key,
+        '--salt', 'd00df00d']  # TODO: use a hash of kernel/ramdisk as the salt.
+
+    # Additional arguments passed to avbtool.
+    if args.gki_signing_extra_args:
+        avbtool_cmd += args.gki_signing_extra_args.split()
+
+    # Outputs the signed vbmeta to a separate file, then append to boot.img
+    # as the boot signature.
+    with tempfile.TemporaryDirectory() as temp_out_dir:
+        boot_signature_output = os.path.join(temp_out_dir, 'boot_signature')
+        avbtool_cmd += ['--do_not_append_vbmeta_image',
+                        '--output_vbmeta_image', boot_signature_output]
+        subprocess.check_call(avbtool_cmd)
+        with open(boot_signature_output, 'rb') as boot_signature:
+            if filesize(boot_signature) > BOOT_IMAGE_V4_SIGNATURE_SIZE:
+                raise ValueError(
+                    f'boot sigature size is > {BOOT_IMAGE_V4_SIGNATURE_SIZE}')
+            write_padded_file(args.output, boot_signature, pagesize)
+
+
 def write_data(args, pagesize):
     write_padded_file(args.output, args.kernel, pagesize)
     write_padded_file(args.output, args.ramdisk, pagesize)
@@ -509,6 +577,8 @@ def write_data(args, pagesize):
         write_padded_file(args.output, args.recovery_dtbo, pagesize)
     if args.header_version == 2:
         write_padded_file(args.output, args.dtb, pagesize)
+    if args.header_version >= 4:
+        add_boot_image_signature(args, pagesize)
 
 
 def write_vendor_boot_data(args):

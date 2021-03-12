@@ -307,7 +307,7 @@ struct vendor_boot_img_hdr_v3 {
 } __attribute__((packed));
 
 /* When the boot image header has a version of 4, the structure of the boot
- * image is the same as version 3:
+ * image is as follows:
  *
  * +---------------------+
  * | boot header         | 4096 bytes
@@ -316,9 +316,12 @@ struct vendor_boot_img_hdr_v3 {
  * +---------------------+
  * | ramdisk             | n pages
  * +---------------------+
+ * | boot signature      | g pages
+ * +---------------------+
  *
  * m = (kernel_size + 4096 - 1) / 4096
  * n = (ramdisk_size + 4096 - 1) / 4096
+ * g = (signature_size + 4096 - 1) / 4096
  *
  * Note that in version 4 of the boot image header, page size is fixed at 4096
  * bytes.
@@ -390,6 +393,7 @@ struct vendor_boot_img_hdr_v3 {
  *    jump to kernel_addr
  */
 struct boot_img_hdr_v4 : public boot_img_hdr_v3 {
+    uint32_t signature_size; /* size in bytes */
 } __attribute__((packed));
 
 struct vendor_boot_img_hdr_v4 : public vendor_boot_img_hdr_v3 {
