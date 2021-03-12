@@ -59,6 +59,9 @@ python_binary_host {
     srcs: [
         "mkbootimg.py",
     ],
+    required: [
+        "avbtool",
+    ],
 }
 
 python_binary_host {
@@ -93,7 +96,11 @@ python_test_host {
     srcs: [
         "tests/mkbootimg_test.py",
     ],
+    data: [
+        "tests/data/*",
+    ],
     required: [
+        "avbtool",
         "mkbootimg",
         "unpack_bootimg",
     ],
