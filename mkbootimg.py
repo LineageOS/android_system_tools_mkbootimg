@@ -58,6 +58,9 @@ VENDOR_RAMDISK_NAME_SIZE = 32
 VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE = 16
 VENDOR_RAMDISK_TABLE_ENTRY_V4_SIZE = 108
 
+# Names with special meaning, mustn't be specified in --ramdisk_name.
+VENDOR_RAMDISK_NAME_BLOCKLIST = {b'default'}
+
 PARSER_ARGUMENT_VENDOR_RAMDISK_FRAGMENT = '--vendor_ramdisk_fragment'
 
 
@@ -305,6 +308,9 @@ class VendorRamdiskTableBuilder:
     def add_entry(self, ramdisk_path, ramdisk_type, ramdisk_name, board_id):
         # Strip any trailing null for simple comparison.
         stripped_ramdisk_name = ramdisk_name.rstrip(b'\x00')
+        if stripped_ramdisk_name in VENDOR_RAMDISK_NAME_BLOCKLIST:
+            raise ValueError(
+                f'Banned vendor ramdisk name: {stripped_ramdisk_name}')
         if stripped_ramdisk_name in self.ramdisk_names:
             raise ValueError(
                 f'Duplicated vendor ramdisk name: {stripped_ramdisk_name}')
