@@ -541,6 +541,8 @@ def parse_cmdline():
                         help='path to RSA private key file')
     parser.add_argument('--gki_signing_extra_args',
                         help='other hash arguments passed to avbtool')
+    parser.add_argument('--gki_signing_avbtool_path',
+                        help='path to avbtool for boot signature generation')
     parser.add_argument('--vendor_boot', type=FileType('wb'),
                         help='vendor boot output file name')
     parser.add_argument('--vendor_ramdisk', type=FileType('rb'),
@@ -582,11 +584,18 @@ def add_boot_image_signature(args, pagesize):
         pad_file(args.output, pagesize)
         return
 
+    avbtool = 'avbtool'  # Used from otatools.zip or Android build env.
+
+    # We need to specify the path of avbtool in build/core/Makefile.
+    # Because avbtool is not guaranteed to be in $PATH there.
+    if args.gki_signing_avbtool_path:
+        avbtool = args.gki_signing_avbtool_path
+
     # Need to specify a value of --partition_size for avbtool to work.
     # We use 64 MB below, but avbtool will not resize the boot image to
     # this size because --do_not_append_vbmeta_image is also specified.
     avbtool_cmd = [
-        'avbtool', 'add_hash_footer',
+        avbtool, 'add_hash_footer',
         '--partition_name', 'boot',
         '--partition_size', str(64 * 1024 * 1024),
         '--image', args.output.name,
