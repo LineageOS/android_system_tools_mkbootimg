@@ -103,12 +103,13 @@ struct boot_img_hdr_v0 {
 
     uint8_t name[BOOT_NAME_SIZE]; /* asciiz product name */
 
-    uint8_t cmdline[BOOT_ARGS_SIZE];
+    uint8_t cmdline[BOOT_ARGS_SIZE]; /* asciiz kernel commandline */
 
     uint32_t id[8]; /* timestamp / checksum / sha1 / etc */
 
     // Supplemental command line data; kept here to maintain
     // binary compatibility with older versions of mkbootimg.
+    // Asciiz.
     uint8_t extra_cmdline[BOOT_EXTRA_ARGS_SIZE];
 } __attribute__((packed));
 
@@ -278,6 +279,7 @@ struct boot_img_hdr_v3 {
     // Version of the boot image header.
     uint32_t header_version;
 
+    // Asciiz kernel commandline.
     uint8_t cmdline[BOOT_ARGS_SIZE + BOOT_EXTRA_ARGS_SIZE];
 } __attribute__((packed));
 
@@ -295,7 +297,7 @@ struct vendor_boot_img_hdr_v3 {
 
     uint32_t vendor_ramdisk_size; /* size in bytes */
 
-    uint8_t cmdline[VENDOR_BOOT_ARGS_SIZE];
+    uint8_t cmdline[VENDOR_BOOT_ARGS_SIZE]; /* asciiz kernel commandline */
 
     uint32_t tags_addr; /* physical addr for kernel tags (if required) */
     uint8_t name[VENDOR_BOOT_NAME_SIZE]; /* asciiz product name */
