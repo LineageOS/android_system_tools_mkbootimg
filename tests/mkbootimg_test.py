@@ -62,6 +62,81 @@ def subsequence_of(list1, list2):
     return subsequence_of(list1, list2[1:])
 
 
+def test_boot_image_v4_signature(exec_dir, avbtool_path=None):
+    """Tests the boot_signature in boot.img v4"""
+
+    with tempfile.TemporaryDirectory() as temp_out_dir:
+        boot_img = os.path.join(temp_out_dir, 'boot.img')
+        kernel = create_blank_file(os.path.join(temp_out_dir, 'kernel'),
+            0x1000)
+        ramdisk = create_blank_file(os.path.join(temp_out_dir, 'ramdisk'),
+            0x1000)
+        mkbootimg_cmds = [
+            'mkbootimg',
+            '--header_version', '4',
+            '--kernel', kernel,
+            '--ramdisk', ramdisk,
+            '--cmdline', 'test-cmdline',
+            '--os_version', '11.0.0',
+            '--os_patch_level', '2021-01',
+            '--gki_signing_algorithm', 'SHA256_RSA2048',
+            '--gki_signing_key', './tests/data/testkey_rsa2048.pem',
+            '--gki_signing_extra_args', '--prop foo:bar --prop gki:nice',
+            '--output', boot_img,
+        ]
+
+        if avbtool_path:
+            mkbootimg_cmds.extend(['--gki_signing_avbtool_path', avbtool_path])
+
+        unpack_bootimg_cmds = [
+            'unpack_bootimg',
+            '--boot_img', boot_img,
+            '--out', os.path.join(temp_out_dir, 'out'),
+        ]
+
+        # cwd=exec_dir is required to read
+        # ./tests/data/testkey_rsa2048.pem for --gki_signing_key.
+        subprocess.run(mkbootimg_cmds, check=True, cwd=exec_dir)
+        subprocess.run(unpack_bootimg_cmds, check=True)
+
+        # Checks the content of the boot signature.
+        expected_boot_signature_info = (
+            'Minimum libavb version:   1.0\n'
+            'Header Block:             256 bytes\n'
+            'Authentication Block:     320 bytes\n'
+            'Auxiliary Block:          832 bytes\n'
+            'Public key (sha1):        '
+            'cdbb77177f731920bbe0a0f94f84d9038ae0617d\n'
+            'Algorithm:                SHA256_RSA2048\n'
+            'Rollback Index:           0\n'
+            'Flags:                    0\n'
+            'Rollback Index Location:  0\n'
+            "Release String:           'avbtool 1.2.0'\n"
+            'Descriptors:\n'
+            '    Hash descriptor:\n'
+            '      Image Size:            12288 bytes\n'
+            '      Hash Algorithm:        sha256\n'
+            '      Partition Name:        boot\n'
+            '      Salt:                  d00df00d\n'
+            '      Digest:                '
+            '0efdd44938b64f68d743b920cf9d9073'
+            'ef51ef09e1eeb59d7236928233bc5ae2\n'
+            '      Flags:                 0\n'
+            "    Prop: foo -> 'bar'\n"
+            "    Prop: gki -> 'nice'\n"
+        )
+
+        avbtool_info_cmds = [
+            avbtool_path or 'avbtool',  # use avbtool_path if it is not None.
+            'info_image', '--image',
+            os.path.join(temp_out_dir, 'out', 'boot_signature')
+        ]
+        result = subprocess.run(avbtool_info_cmds, check=True,
+                                capture_output=True, encoding='utf-8')
+
+        return result.stdout == expected_boot_signature_info
+
+
 class MkbootimgTest(unittest.TestCase):
     """Tests the functionalities of mkbootimg and unpack_bootimg."""
 
@@ -73,76 +148,21 @@ class MkbootimgTest(unittest.TestCase):
         # following tests with subprocess.run(..., cwd=self._exec_dir, ...).
         self._exec_dir = os.path.abspath(os.path.dirname(sys.argv[0]))
 
+        self._avbtool_path = os.path.join(self._exec_dir, 'avbtool')
+
         # Set self.maxDiff to None to see full diff in assertion.
         # C0103: invalid-name for maxDiff.
         self.maxDiff = None  # pylint: disable=C0103
 
-    def test_boot_image_v4_signature(self):
-        """Tests the boot signature in a boot image version 4."""
-        with tempfile.TemporaryDirectory() as temp_out_dir:
-            boot_img = os.path.join(temp_out_dir, 'boot.img')
-            kernel = create_blank_file(os.path.join(temp_out_dir, 'kernel'),
-                0x1000)
-            ramdisk = create_blank_file(os.path.join(temp_out_dir, 'ramdisk'),
-                0x1000)
-            mkbootimg_cmds = [
-                'mkbootimg',
-                '--header_version', '4',
-                '--kernel', kernel,
-                '--ramdisk', ramdisk,
-                '--cmdline', 'test-cmdline',
-                '--os_version', '11.0.0',
-                '--os_patch_level', '2021-01',
-                '--gki_signing_algorithm', 'SHA256_RSA2048',
-                '--gki_signing_key', './tests/data/testkey_rsa2048.pem',
-                '--gki_signing_extra_args', '--prop foo:bar --prop gki:nice',
-                '--output', boot_img,
-            ]
-            unpack_bootimg_cmds = [
-                'unpack_bootimg',
-                '--boot_img', boot_img,
-                '--out', os.path.join(temp_out_dir, 'out'),
-            ]
+    def test_boot_image_v4_signature_without_avbtool_path(self):
+        """Boot signature generation without --gki_signing_avbtool_path."""
+        # None for avbtool_path.
+        self.assertTrue(test_boot_image_v4_signature(self._exec_dir, None))
 
-            # cwd=self._exec_dir is required to read
-            # ./tests/data/testkey_rsa2048.pem for --gki_signing_key.
-            subprocess.run(mkbootimg_cmds, check=True, cwd=self._exec_dir)
-            subprocess.run(unpack_bootimg_cmds, check=True)
-
-            # Checks the content of the boot signature.
-            expected_boot_signature_info = (
-                'Minimum libavb version:   1.0\n'
-                'Header Block:             256 bytes\n'
-                'Authentication Block:     320 bytes\n'
-                'Auxiliary Block:          832 bytes\n'
-                'Public key (sha1):        '
-                'cdbb77177f731920bbe0a0f94f84d9038ae0617d\n'
-                'Algorithm:                SHA256_RSA2048\n'
-                'Rollback Index:           0\n'
-                'Flags:                    0\n'
-                'Rollback Index Location:  0\n'
-                "Release String:           'avbtool 1.2.0'\n"
-                'Descriptors:\n'
-                '    Hash descriptor:\n'
-                '      Image Size:            12288 bytes\n'
-                '      Hash Algorithm:        sha256\n'
-                '      Partition Name:        boot\n'
-                '      Salt:                  d00df00d\n'
-                '      Digest:                '
-                '0efdd44938b64f68d743b920cf9d9073'
-                'ef51ef09e1eeb59d7236928233bc5ae2\n'
-                '      Flags:                 0\n'
-                "    Prop: foo -> 'bar'\n"
-                "    Prop: gki -> 'nice'\n"
-            )
-            avbtool_info_cmds = [
-                'avbtool', 'info_image', '--image',
-                os.path.join(temp_out_dir, 'out', 'boot_signature')
-            ]
-            result = subprocess.run(avbtool_info_cmds, check=True,
-                                    capture_output=True, encoding='utf-8')
-            self.assertEqual(result.stdout,
-                             expected_boot_signature_info)
+    def test_boot_image_v4_signature_with_avbtool_path(self):
+        """Boot signature generation with --gki_signing_avbtool_path."""
+        self.assertTrue(test_boot_image_v4_signature(self._exec_dir,
+                                                     self._avbtool_path))
 
     def test_boot_image_v4_signature_exceed_size(self):
         """Tests the boot signature size exceeded in a boot image version 4."""
@@ -160,6 +180,7 @@ class MkbootimgTest(unittest.TestCase):
                 '--cmdline', 'test-cmdline',
                 '--os_version', '11.0.0',
                 '--os_patch_level', '2021-01',
+                '--gki_signing_avbtool_path', self._avbtool_path,
                 '--gki_signing_algorithm', 'SHA256_RSA2048',
                 '--gki_signing_key', './tests/data/testkey_rsa2048.pem',
                 '--gki_signing_extra_args',
