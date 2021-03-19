@@ -81,7 +81,7 @@ def test_boot_image_v4_signature(exec_dir, avbtool_path=None):
             '--os_patch_level', '2021-01',
             '--gki_signing_algorithm', 'SHA256_RSA2048',
             '--gki_signing_key', './tests/data/testkey_rsa2048.pem',
-            '--gki_signing_extra_args', '--prop foo:bar --prop gki:nice',
+            '--gki_signing_signature_args', '--prop foo:bar --prop gki:nice',
             '--output', boot_img,
         ]
 
@@ -183,7 +183,7 @@ class MkbootimgTest(unittest.TestCase):
                 '--gki_signing_avbtool_path', self._avbtool_path,
                 '--gki_signing_algorithm', 'SHA256_RSA2048',
                 '--gki_signing_key', './tests/data/testkey_rsa2048.pem',
-                '--gki_signing_extra_args',
+                '--gki_signing_signature_args',
                 # Makes it exceed the signature max size.
                 '--prop foo:bar --prop gki:nice ' * 64,
                 '--output', boot_img,
