@@ -539,7 +539,7 @@ def parse_cmdline():
                         help='GKI signing algorithm to use')
     parser.add_argument('--gki_signing_key',
                         help='path to RSA private key file')
-    parser.add_argument('--gki_signing_extra_args',
+    parser.add_argument('--gki_signing_signature_args',
                         help='other hash arguments passed to avbtool')
     parser.add_argument('--gki_signing_avbtool_path',
                         help='path to avbtool for boot signature generation')
@@ -604,8 +604,8 @@ def add_boot_image_signature(args, pagesize):
         '--salt', 'd00df00d']  # TODO: use a hash of kernel/ramdisk as the salt.
 
     # Additional arguments passed to avbtool.
-    if args.gki_signing_extra_args:
-        avbtool_cmd += args.gki_signing_extra_args.split()
+    if args.gki_signing_signature_args:
+        avbtool_cmd += args.gki_signing_signature_args.split()
 
     # Outputs the signed vbmeta to a separate file, then append to boot.img
     # as the boot signature.
