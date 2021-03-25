@@ -272,7 +272,7 @@ class MkbootimgTest(unittest.TestCase):
                 'vendor ramdisk total size: 16384',
                 'dtb size: 4096',
                 'vendor ramdisk table size: 324',
-                'size: 4096', 'offset: 0', 'type: 0x0', 'name:',
+                'size: 4096', 'offset: 0', 'type: 0x1', 'name:',
                 '0x00000000, 0x00000000, 0x00000000, 0x00000000,',
                 '0x00000000, 0x00000000, 0x00000000, 0x00000000,',
                 '0x00000000, 0x00000000, 0x00000000, 0x00000000,',
