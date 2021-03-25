@@ -340,7 +340,7 @@ class MkbootimgTest(unittest.TestCase):
             subprocess.run(unpack_bootimg_cmds, check=True)
 
             json_file = os.path.join(temp_out_dir, 'out', 'mkbootimg_args.json')
-            with open (json_file) as json_fd:
+            with open(json_file) as json_fd:
                 actual_mkbootimg_args = json.load(json_fd)
                 self.assertEqual(actual_mkbootimg_args,
                                  expected_mkbootimg_args)
@@ -391,7 +391,203 @@ class MkbootimgTest(unittest.TestCase):
             subprocess.run(unpack_bootimg_cmds, check=True)
 
             json_file = os.path.join(temp_out_dir, 'out', 'mkbootimg_args.json')
-            with open (json_file) as json_fd:
+            with open(json_file) as json_fd:
+                actual_mkbootimg_args = json.load(json_fd)
+                self.assertEqual(actual_mkbootimg_args,
+                                 expected_mkbootimg_args)
+
+    def test_unpack_boot_image_v2_json_args(self):
+        """Tests mkbootimg_args.json when unpacking a boot image v2."""
+        with tempfile.TemporaryDirectory() as temp_out_dir:
+            # Output image path.
+            boot_img = os.path.join(temp_out_dir, 'boot.img')
+            # Creates blank images first.
+            kernel = create_blank_file(
+                os.path.join(temp_out_dir, 'kernel'), 0x1000)
+            ramdisk = create_blank_file(
+                os.path.join(temp_out_dir, 'ramdisk'), 0x1000)
+            second = create_blank_file(
+                os.path.join(temp_out_dir, 'second'), 0x1000)
+            recovery_dtbo = create_blank_file(
+                os.path.join(temp_out_dir, 'recovery_dtbo'), 0x1000)
+            dtb = create_blank_file(
+                os.path.join(temp_out_dir, 'dtb'), 0x1000)
+
+            cmdline = (BOOT_ARGS_SIZE - 1) * 'x'
+            extra_cmdline = (BOOT_EXTRA_ARGS_SIZE - 1) * 'y'
+
+            mkbootimg_cmds = [
+                'mkbootimg',
+                '--header_version', '2',
+                '--base', '0x00000000',
+                '--kernel', kernel,
+                '--kernel_offset', '0x00008000',
+                '--ramdisk', ramdisk,
+                '--ramdisk_offset', '0x01000000',
+                '--second', second,
+                '--second_offset', '0x40000000',
+                '--recovery_dtbo', recovery_dtbo,
+                '--dtb', dtb,
+                '--dtb_offset', '0x01f00000',
+                '--tags_offset', '0x00000100',
+                '--pagesize', '0x00001000',
+                '--os_version', '11.0.0',
+                '--os_patch_level', '2021-03',
+                '--board', 'boot_v2',
+                '--cmdline', cmdline + extra_cmdline,
+                '--output', boot_img,
+            ]
+            unpack_bootimg_cmds = [
+                'unpack_bootimg',
+                '--boot_img', boot_img,
+                '--out', os.path.join(temp_out_dir, 'out'),
+            ]
+            # The expected dict in mkbootimg_args.json.
+            expected_mkbootimg_args = {
+                'header_version': '2',
+                'base': '0x00000000',
+                'kernel_offset': '0x00008000',
+                'ramdisk_offset': '0x01000000',
+                'second_offset': '0x40000000',
+                'dtb_offset': '0x0000000001f00000',  # dtb_offset is uint64_t.
+                'tags_offset': '0x00000100',
+                'pagesize': '0x00001000',
+                'os_version': '11.0.0',
+                'os_patch_level': '2021-03',
+                'board': 'boot_v2',
+                'cmdline': cmdline + extra_cmdline,
+            }
+
+            subprocess.run(mkbootimg_cmds, check=True)
+            subprocess.run(unpack_bootimg_cmds, check=True)
+
+            json_file = os.path.join(temp_out_dir, 'out', 'mkbootimg_args.json')
+            with open(json_file) as json_fd:
+                actual_mkbootimg_args = json.load(json_fd)
+                self.assertEqual(actual_mkbootimg_args,
+                                 expected_mkbootimg_args)
+
+    def test_unpack_boot_image_v1_json_args(self):
+        """Tests mkbootimg_args.json when unpacking a boot image v1."""
+        with tempfile.TemporaryDirectory() as temp_out_dir:
+            # Output image path.
+            boot_img = os.path.join(temp_out_dir, 'boot.img')
+            # Creates blank images first.
+            kernel = create_blank_file(
+                os.path.join(temp_out_dir, 'kernel'), 0x1000)
+            ramdisk = create_blank_file(
+                os.path.join(temp_out_dir, 'ramdisk'), 0x1000)
+            recovery_dtbo = create_blank_file(
+                os.path.join(temp_out_dir, 'recovery_dtbo'), 0x1000)
+
+            cmdline = (BOOT_ARGS_SIZE - 1) * 'x'
+            extra_cmdline = (BOOT_EXTRA_ARGS_SIZE - 1) * 'y'
+
+            mkbootimg_cmds = [
+                'mkbootimg',
+                '--header_version', '1',
+                '--base', '0x00000000',
+                '--kernel', kernel,
+                '--kernel_offset', '0x00008000',
+                '--ramdisk', ramdisk,
+                '--ramdisk_offset', '0x01000000',
+                '--recovery_dtbo', recovery_dtbo,
+                '--tags_offset', '0x00000100',
+                '--pagesize', '0x00001000',
+                '--os_version', '11.0.0',
+                '--os_patch_level', '2021-03',
+                '--board', 'boot_v1',
+                '--cmdline', cmdline + extra_cmdline,
+                '--output', boot_img,
+            ]
+            unpack_bootimg_cmds = [
+                'unpack_bootimg',
+                '--boot_img', boot_img,
+                '--out', os.path.join(temp_out_dir, 'out'),
+            ]
+            # The expected dict in mkbootimg_args.json.
+            expected_mkbootimg_args = {
+                'header_version': '1',
+                'base': '0x00000000',
+                'kernel_offset': '0x00008000',
+                'ramdisk_offset': '0x01000000',
+                'second_offset': '0x00000000',
+                'tags_offset': '0x00000100',
+                'pagesize': '0x00001000',
+                'os_version': '11.0.0',
+                'os_patch_level': '2021-03',
+                'board': 'boot_v1',
+                'cmdline': cmdline + extra_cmdline,
+            }
+
+            subprocess.run(mkbootimg_cmds, check=True)
+            subprocess.run(unpack_bootimg_cmds, check=True)
+
+            json_file = os.path.join(temp_out_dir, 'out', 'mkbootimg_args.json')
+            with open(json_file) as json_fd:
+                actual_mkbootimg_args = json.load(json_fd)
+                self.assertEqual(actual_mkbootimg_args,
+                                 expected_mkbootimg_args)
+
+    def test_unpack_boot_image_v0_json_args(self):
+        """Tests mkbootimg_args.json when unpacking a boot image v0."""
+        with tempfile.TemporaryDirectory() as temp_out_dir:
+            # Output image path.
+            boot_img = os.path.join(temp_out_dir, 'boot.img')
+            # Creates blank images first.
+            kernel = create_blank_file(
+                os.path.join(temp_out_dir, 'kernel'), 0x1000)
+            ramdisk = create_blank_file(
+                os.path.join(temp_out_dir, 'ramdisk'), 0x1000)
+            second = create_blank_file(
+                os.path.join(temp_out_dir, 'second'), 0x1000)
+
+            cmdline = (BOOT_ARGS_SIZE - 1) * 'x'
+            extra_cmdline = (BOOT_EXTRA_ARGS_SIZE - 1) * 'y'
+
+            mkbootimg_cmds = [
+                'mkbootimg',
+                '--header_version', '0',
+                '--base', '0x00000000',
+                '--kernel', kernel,
+                '--kernel_offset', '0x00008000',
+                '--ramdisk', ramdisk,
+                '--ramdisk_offset', '0x01000000',
+                '--second', second,
+                '--second_offset', '0x40000000',
+                '--tags_offset', '0x00000100',
+                '--pagesize', '0x00001000',
+                '--os_version', '11.0.0',
+                '--os_patch_level', '2021-03',
+                '--board', 'boot_v0',
+                '--cmdline', cmdline + extra_cmdline,
+                '--output', boot_img,
+            ]
+            unpack_bootimg_cmds = [
+                'unpack_bootimg',
+                '--boot_img', boot_img,
+                '--out', os.path.join(temp_out_dir, 'out'),
+            ]
+            # The expected dict in mkbootimg_args.json.
+            expected_mkbootimg_args = {
+                'header_version': '0',
+                'base': '0x00000000',
+                'kernel_offset': '0x00008000',
+                'ramdisk_offset': '0x01000000',
+                'second_offset': '0x40000000',
+                'tags_offset': '0x00000100',
+                'pagesize': '0x00001000',
+                'os_version': '11.0.0',
+                'os_patch_level': '2021-03',
+                'board': 'boot_v0',
+                'cmdline': cmdline + extra_cmdline,
+            }
+
+            subprocess.run(mkbootimg_cmds, check=True)
+            subprocess.run(unpack_bootimg_cmds, check=True)
+
+            json_file = os.path.join(temp_out_dir, 'out', 'mkbootimg_args.json')
+            with open(json_file) as json_fd:
                 actual_mkbootimg_args = json.load(json_fd)
                 self.assertEqual(actual_mkbootimg_args,
                                  expected_mkbootimg_args)
