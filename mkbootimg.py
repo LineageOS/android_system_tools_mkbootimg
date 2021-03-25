@@ -444,7 +444,7 @@ def parse_vendor_ramdisk_args(args, args_list):
     vendor_ramdisk_table_builder = VendorRamdiskTableBuilder()
     if args.vendor_ramdisk is not None:
         vendor_ramdisk_table_builder.add_entry(
-            args.vendor_ramdisk.name, VENDOR_RAMDISK_TYPE_NONE, b'', None)
+            args.vendor_ramdisk.name, VENDOR_RAMDISK_TYPE_PLATFORM, b'', None)
 
     while PARSER_ARGUMENT_VENDOR_RAMDISK_FRAGMENT in args_list:
         idx = args_list.index(PARSER_ARGUMENT_VENDOR_RAMDISK_FRAGMENT) + 2

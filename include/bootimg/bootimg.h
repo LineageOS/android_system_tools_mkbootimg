@@ -361,15 +361,18 @@ struct vendor_boot_img_hdr_v3 {
  *
  * The vendor ramdisk table holds the size, offset, type, name and hardware
  * identifiers of each ramdisk. The type field denotes the type of its content.
- * The hardware identifiers are specified in the board_id field in each table
- * entry. The board_id field is consist of a vector of unsigned integer words,
- * and the encoding scheme is defined by the hardware vendor.
+ * The vendor ramdisk names are unique. The hardware identifiers are specified
+ * in the board_id field in each table entry. The board_id field is consist of a
+ * vector of unsigned integer words, and the encoding scheme is defined by the
+ * hardware vendor.
  *
  * For the different type of ramdisks, there are:
  *    - VENDOR_RAMDISK_TYPE_NONE indicates the value is unspecified.
- *    - VENDOR_RAMDISK_TYPE_PLATFORM ramdisk contains platform specific bits.
- *    - VENDOR_RAMDISK_TYPE_RECOVERY ramdisk contains recovery resources.
- *    - VENDOR_RAMDISK_TYPE_DLKM ramdisk contains dynamic loadable kernel
+ *    - VENDOR_RAMDISK_TYPE_PLATFORM ramdisks contain platform specific bits, so
+ *      the bootloader should always load these into memory.
+ *    - VENDOR_RAMDISK_TYPE_RECOVERY ramdisks contain recovery resources, so
+ *      the bootloader should load these when booting into recovery.
+ *    - VENDOR_RAMDISK_TYPE_DLKM ramdisks contain dynamic loadable kernel
  *      modules.
  *
  * Version 4 of the vendor boot image also adds a bootconfig section to the end
