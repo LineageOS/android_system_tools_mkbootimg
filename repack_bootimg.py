@@ -260,12 +260,19 @@ class BootImage:
             src_dir: a source dir containing the files to copy from.
             files: a list of files to copy from src_dir.
         """
+        # Creates missing parent dirs with 0o755.
+        original_mask = os.umask(0o022)
         for f in files:
             src_file = os.path.join(src_dir, f)
             dst_file = os.path.join(self.ramdisk_dir, f)
+            dst_dir = os.path.dirname(dst_file)
+            if not os.path.exists(dst_dir):
+                print("Creating dir '{}'".format(dst_dir))
+                os.makedirs(dst_dir, 0o755)
             print("Copying file '{}' into '{}'".format(
                 src_file, self._bootimg))
             shutil.copy2(src_file, dst_file)
+        os.umask(original_mask)
 
     @property
     def ramdisk_dir(self):
