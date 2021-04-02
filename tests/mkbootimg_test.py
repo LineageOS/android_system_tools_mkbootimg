@@ -19,6 +19,7 @@
 import json
 import logging
 import os
+import random
 import subprocess
 import sys
 import tempfile
@@ -36,10 +37,11 @@ VENDOR_BOOT_ARGS_SIZE = 2048
 BOOT_IMAGE_V4_SIGNATURE_SIZE = 4096
 
 
-def create_blank_file(pathname, size):
-    """Creates a zero-filled file and returns its pathname."""
+def generate_test_file(pathname, size, seed=None):
+    """Generates a gibberish-filled test file and returns its pathname."""
+    random.seed(os.path.basename(pathname) if seed is None else seed)
     with open(pathname, 'wb') as f:
-        f.write(b'\x00' * size)
+        f.write(random.randbytes(size))
     return pathname
 
 
@@ -62,81 +64,6 @@ def subsequence_of(list1, list2):
     return subsequence_of(list1, list2[1:])
 
 
-def test_boot_image_v4_signature(exec_dir, avbtool_path=None):
-    """Tests the boot_signature in boot.img v4"""
-
-    with tempfile.TemporaryDirectory() as temp_out_dir:
-        boot_img = os.path.join(temp_out_dir, 'boot.img')
-        kernel = create_blank_file(os.path.join(temp_out_dir, 'kernel'),
-            0x1000)
-        ramdisk = create_blank_file(os.path.join(temp_out_dir, 'ramdisk'),
-            0x1000)
-        mkbootimg_cmds = [
-            'mkbootimg',
-            '--header_version', '4',
-            '--kernel', kernel,
-            '--ramdisk', ramdisk,
-            '--cmdline', 'test-cmdline',
-            '--os_version', '11.0.0',
-            '--os_patch_level', '2021-01',
-            '--gki_signing_algorithm', 'SHA256_RSA2048',
-            '--gki_signing_key', './tests/data/testkey_rsa2048.pem',
-            '--gki_signing_signature_args', '--prop foo:bar --prop gki:nice',
-            '--output', boot_img,
-        ]
-
-        if avbtool_path:
-            mkbootimg_cmds.extend(['--gki_signing_avbtool_path', avbtool_path])
-
-        unpack_bootimg_cmds = [
-            'unpack_bootimg',
-            '--boot_img', boot_img,
-            '--out', os.path.join(temp_out_dir, 'out'),
-        ]
-
-        # cwd=exec_dir is required to read
-        # ./tests/data/testkey_rsa2048.pem for --gki_signing_key.
-        subprocess.run(mkbootimg_cmds, check=True, cwd=exec_dir)
-        subprocess.run(unpack_bootimg_cmds, check=True)
-
-        # Checks the content of the boot signature.
-        expected_boot_signature_info = (
-            'Minimum libavb version:   1.0\n'
-            'Header Block:             256 bytes\n'
-            'Authentication Block:     320 bytes\n'
-            'Auxiliary Block:          832 bytes\n'
-            'Public key (sha1):        '
-            'cdbb77177f731920bbe0a0f94f84d9038ae0617d\n'
-            'Algorithm:                SHA256_RSA2048\n'
-            'Rollback Index:           0\n'
-            'Flags:                    0\n'
-            'Rollback Index Location:  0\n'
-            "Release String:           'avbtool 1.2.0'\n"
-            'Descriptors:\n'
-            '    Hash descriptor:\n'
-            '      Image Size:            12288 bytes\n'
-            '      Hash Algorithm:        sha256\n'
-            '      Partition Name:        boot\n'
-            '      Salt:                  d00df00d\n'
-            '      Digest:                '
-            '0efdd44938b64f68d743b920cf9d9073'
-            'ef51ef09e1eeb59d7236928233bc5ae2\n'
-            '      Flags:                 0\n'
-            "    Prop: foo -> 'bar'\n"
-            "    Prop: gki -> 'nice'\n"
-        )
-
-        avbtool_info_cmds = [
-            avbtool_path or 'avbtool',  # use avbtool_path if it is not None.
-            'info_image', '--image',
-            os.path.join(temp_out_dir, 'out', 'boot_signature')
-        ]
-        result = subprocess.run(avbtool_info_cmds, check=True,
-                                capture_output=True, encoding='utf-8')
-
-        return result.stdout == expected_boot_signature_info
-
-
 class MkbootimgTest(unittest.TestCase):
     """Tests the functionalities of mkbootimg and unpack_bootimg."""
 
@@ -154,24 +81,98 @@ class MkbootimgTest(unittest.TestCase):
         # C0103: invalid-name for maxDiff.
         self.maxDiff = None  # pylint: disable=C0103
 
+    def _test_boot_image_v4_signature(self, avbtool_path):
+        """Tests the boot_signature in boot.img v4."""
+        with tempfile.TemporaryDirectory() as temp_out_dir:
+            boot_img = os.path.join(temp_out_dir, 'boot.img')
+            kernel = generate_test_file(os.path.join(temp_out_dir, 'kernel'),
+                                        0x1000)
+            ramdisk = generate_test_file(os.path.join(temp_out_dir, 'ramdisk'),
+                                         0x1000)
+            mkbootimg_cmds = [
+                'mkbootimg',
+                '--header_version', '4',
+                '--kernel', kernel,
+                '--ramdisk', ramdisk,
+                '--cmdline', 'test-cmdline',
+                '--os_version', '11.0.0',
+                '--os_patch_level', '2021-01',
+                '--gki_signing_algorithm', 'SHA256_RSA2048',
+                '--gki_signing_key', './tests/data/testkey_rsa2048.pem',
+                '--gki_signing_signature_args',
+                '--prop foo:bar --prop gki:nice',
+                '--output', boot_img,
+            ]
+
+            if avbtool_path:
+                mkbootimg_cmds.extend(
+                    ['--gki_signing_avbtool_path', avbtool_path])
+
+            unpack_bootimg_cmds = [
+                'unpack_bootimg',
+                '--boot_img', boot_img,
+                '--out', os.path.join(temp_out_dir, 'out'),
+            ]
+
+            # cwd=self._exec_dir is required to read
+            # ./tests/data/testkey_rsa2048.pem for --gki_signing_key.
+            subprocess.run(mkbootimg_cmds, check=True, cwd=self._exec_dir)
+            subprocess.run(unpack_bootimg_cmds, check=True)
+
+            # Checks the content of the boot signature.
+            expected_boot_signature_info = (
+                'Minimum libavb version:   1.0\n'
+                'Header Block:             256 bytes\n'
+                'Authentication Block:     320 bytes\n'
+                'Auxiliary Block:          832 bytes\n'
+                'Public key (sha1):        '
+                'cdbb77177f731920bbe0a0f94f84d9038ae0617d\n'
+                'Algorithm:                SHA256_RSA2048\n'
+                'Rollback Index:           0\n'
+                'Flags:                    0\n'
+                'Rollback Index Location:  0\n'
+                "Release String:           'avbtool 1.2.0'\n"
+                'Descriptors:\n'
+                '    Hash descriptor:\n'
+                '      Image Size:            12288 bytes\n'
+                '      Hash Algorithm:        sha256\n'
+                '      Partition Name:        boot\n'
+                '      Salt:                  d00df00d\n'
+                '      Digest:                '
+                '9749bb508f2677426b14ff668d39a163'
+                'e16f0c4cbaf92ec096124e3f199fafac\n'
+                '      Flags:                 0\n'
+                "    Prop: foo -> 'bar'\n"
+                "    Prop: gki -> 'nice'\n"
+            )
+
+            avbtool_info_cmds = [
+                # use avbtool_path if it is not None.
+                avbtool_path or 'avbtool',
+                'info_image', '--image',
+                os.path.join(temp_out_dir, 'out', 'boot_signature')
+            ]
+            result = subprocess.run(avbtool_info_cmds, check=True,
+                                    capture_output=True, encoding='utf-8')
+
+            self.assertEqual(result.stdout, expected_boot_signature_info)
+
     def test_boot_image_v4_signature_without_avbtool_path(self):
         """Boot signature generation without --gki_signing_avbtool_path."""
-        # None for avbtool_path.
-        self.assertTrue(test_boot_image_v4_signature(self._exec_dir, None))
+        self._test_boot_image_v4_signature(avbtool_path=None)
 
     def test_boot_image_v4_signature_with_avbtool_path(self):
         """Boot signature generation with --gki_signing_avbtool_path."""
-        self.assertTrue(test_boot_image_v4_signature(self._exec_dir,
-                                                     self._avbtool_path))
+        self._test_boot_image_v4_signature(avbtool_path=self._avbtool_path)
 
     def test_boot_image_v4_signature_exceed_size(self):
         """Tests the boot signature size exceeded in a boot image version 4."""
         with tempfile.TemporaryDirectory() as temp_out_dir:
             boot_img = os.path.join(temp_out_dir, 'boot.img')
-            kernel = create_blank_file(os.path.join(temp_out_dir, 'kernel'),
-                0x1000)
-            ramdisk = create_blank_file(os.path.join(temp_out_dir, 'ramdisk'),
-                0x1000)
+            kernel = generate_test_file(os.path.join(temp_out_dir, 'kernel'),
+                                        0x1000)
+            ramdisk = generate_test_file(os.path.join(temp_out_dir, 'ramdisk'),
+                                         0x1000)
             mkbootimg_cmds = [
                 'mkbootimg',
                 '--header_version', '4',
@@ -203,10 +204,10 @@ class MkbootimgTest(unittest.TestCase):
         """Tests no boot signature in a boot image version 4."""
         with tempfile.TemporaryDirectory() as temp_out_dir:
             boot_img = os.path.join(temp_out_dir, 'boot.img')
-            kernel = create_blank_file(os.path.join(temp_out_dir, 'kernel'),
-                0x1000)
-            ramdisk = create_blank_file(os.path.join(temp_out_dir, 'ramdisk'),
-                0x1000)
+            kernel = generate_test_file(os.path.join(temp_out_dir, 'kernel'),
+                                        0x1000)
+            ramdisk = generate_test_file(os.path.join(temp_out_dir, 'ramdisk'),
+                                         0x1000)
 
             # The boot signature will be zeros if no
             # --gki_signing_[algorithm|key] is provided.
@@ -229,7 +230,8 @@ class MkbootimgTest(unittest.TestCase):
             subprocess.run(mkbootimg_cmds, check=True)
             subprocess.run(unpack_bootimg_cmds, check=True)
 
-            boot_signature = os.path.join(temp_out_dir, 'out', 'boot_signature')
+            boot_signature = os.path.join(
+                temp_out_dir, 'out', 'boot_signature')
             with open(boot_signature) as f:
                 zeros = '\x00' * BOOT_IMAGE_V4_SIGNATURE_SIZE
                 self.assertEqual(f.read(), zeros)
@@ -238,13 +240,13 @@ class MkbootimgTest(unittest.TestCase):
         """Tests vendor_boot version 4."""
         with tempfile.TemporaryDirectory() as temp_out_dir:
             vendor_boot_img = os.path.join(temp_out_dir, 'vendor_boot.img')
-            dtb = create_blank_file(os.path.join(temp_out_dir, 'dtb'), 0x1000)
-            ramdisk1 = create_blank_file(os.path.join(temp_out_dir, 'ramdisk1'),
-                0x1000)
-            ramdisk2 = create_blank_file(os.path.join(temp_out_dir, 'ramdisk2'),
-                0x2000)
-            bootconfig = create_blank_file(os.path.join(temp_out_dir,
-                'bootconfig'), 0x1000)
+            dtb = generate_test_file(os.path.join(temp_out_dir, 'dtb'), 0x1000)
+            ramdisk1 = generate_test_file(
+                os.path.join(temp_out_dir, 'ramdisk1'), 0x1000)
+            ramdisk2 = generate_test_file(
+                os.path.join(temp_out_dir, 'ramdisk2'), 0x2000)
+            bootconfig = generate_test_file(
+                os.path.join(temp_out_dir, 'bootconfig'), 0x1000)
             mkbootimg_cmds = [
                 'mkbootimg',
                 '--header_version', '4',
@@ -267,7 +269,7 @@ class MkbootimgTest(unittest.TestCase):
                 '--out', os.path.join(temp_out_dir, 'out'),
             ]
             expected_output = [
-                'boot_magic: VNDRBOOT',
+                'boot magic: VNDRBOOT',
                 'vendor boot image header version: 4',
                 'vendor ramdisk total size: 16384',
                 'dtb size: 4096',
@@ -309,10 +311,10 @@ class MkbootimgTest(unittest.TestCase):
         """Tests mkbootimg_args.json when unpacking a boot image version 3."""
         with tempfile.TemporaryDirectory() as temp_out_dir:
             boot_img = os.path.join(temp_out_dir, 'boot.img')
-            kernel = create_blank_file(os.path.join(temp_out_dir, 'kernel'),
-                0x1000)
-            ramdisk = create_blank_file(os.path.join(temp_out_dir, 'ramdisk'),
-                0x1000)
+            kernel = generate_test_file(os.path.join(temp_out_dir, 'kernel'),
+                                        0x1000)
+            ramdisk = generate_test_file(os.path.join(temp_out_dir, 'ramdisk'),
+                                         0x1000)
             mkbootimg_cmds = [
                 'mkbootimg',
                 '--header_version', '3',
@@ -339,7 +341,8 @@ class MkbootimgTest(unittest.TestCase):
             subprocess.run(mkbootimg_cmds, check=True)
             subprocess.run(unpack_bootimg_cmds, check=True)
 
-            json_file = os.path.join(temp_out_dir, 'out', 'mkbootimg_args.json')
+            json_file = os.path.join(
+                temp_out_dir, 'out', 'mkbootimg_args.json')
             with open(json_file) as json_fd:
                 actual_mkbootimg_args = json.load(json_fd)
                 self.assertEqual(actual_mkbootimg_args,
@@ -351,9 +354,9 @@ class MkbootimgTest(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as temp_out_dir:
             vendor_boot_img = os.path.join(temp_out_dir, 'vendor_boot.img')
-            dtb = create_blank_file(os.path.join(temp_out_dir, 'dtb'), 0x1000)
-            ramdisk = create_blank_file(os.path.join(temp_out_dir, 'ramdisk'),
-                0x1000)
+            dtb = generate_test_file(os.path.join(temp_out_dir, 'dtb'), 0x1000)
+            ramdisk = generate_test_file(os.path.join(temp_out_dir, 'ramdisk'),
+                                         0x1000)
             mkbootimg_cmds = [
                 'mkbootimg',
                 '--header_version', '3',
@@ -390,7 +393,8 @@ class MkbootimgTest(unittest.TestCase):
             subprocess.run(mkbootimg_cmds, check=True)
             subprocess.run(unpack_bootimg_cmds, check=True)
 
-            json_file = os.path.join(temp_out_dir, 'out', 'mkbootimg_args.json')
+            json_file = os.path.join(
+                temp_out_dir, 'out', 'mkbootimg_args.json')
             with open(json_file) as json_fd:
                 actual_mkbootimg_args = json.load(json_fd)
                 self.assertEqual(actual_mkbootimg_args,
@@ -402,15 +406,15 @@ class MkbootimgTest(unittest.TestCase):
             # Output image path.
             boot_img = os.path.join(temp_out_dir, 'boot.img')
             # Creates blank images first.
-            kernel = create_blank_file(
+            kernel = generate_test_file(
                 os.path.join(temp_out_dir, 'kernel'), 0x1000)
-            ramdisk = create_blank_file(
+            ramdisk = generate_test_file(
                 os.path.join(temp_out_dir, 'ramdisk'), 0x1000)
-            second = create_blank_file(
+            second = generate_test_file(
                 os.path.join(temp_out_dir, 'second'), 0x1000)
-            recovery_dtbo = create_blank_file(
+            recovery_dtbo = generate_test_file(
                 os.path.join(temp_out_dir, 'recovery_dtbo'), 0x1000)
-            dtb = create_blank_file(
+            dtb = generate_test_file(
                 os.path.join(temp_out_dir, 'dtb'), 0x1000)
 
             cmdline = (BOOT_ARGS_SIZE - 1) * 'x'
@@ -461,7 +465,8 @@ class MkbootimgTest(unittest.TestCase):
             subprocess.run(mkbootimg_cmds, check=True)
             subprocess.run(unpack_bootimg_cmds, check=True)
 
-            json_file = os.path.join(temp_out_dir, 'out', 'mkbootimg_args.json')
+            json_file = os.path.join(
+                temp_out_dir, 'out', 'mkbootimg_args.json')
             with open(json_file) as json_fd:
                 actual_mkbootimg_args = json.load(json_fd)
                 self.assertEqual(actual_mkbootimg_args,
@@ -473,11 +478,11 @@ class MkbootimgTest(unittest.TestCase):
             # Output image path.
             boot_img = os.path.join(temp_out_dir, 'boot.img')
             # Creates blank images first.
-            kernel = create_blank_file(
+            kernel = generate_test_file(
                 os.path.join(temp_out_dir, 'kernel'), 0x1000)
-            ramdisk = create_blank_file(
+            ramdisk = generate_test_file(
                 os.path.join(temp_out_dir, 'ramdisk'), 0x1000)
-            recovery_dtbo = create_blank_file(
+            recovery_dtbo = generate_test_file(
                 os.path.join(temp_out_dir, 'recovery_dtbo'), 0x1000)
 
             cmdline = (BOOT_ARGS_SIZE - 1) * 'x'
@@ -523,7 +528,8 @@ class MkbootimgTest(unittest.TestCase):
             subprocess.run(mkbootimg_cmds, check=True)
             subprocess.run(unpack_bootimg_cmds, check=True)
 
-            json_file = os.path.join(temp_out_dir, 'out', 'mkbootimg_args.json')
+            json_file = os.path.join(
+                temp_out_dir, 'out', 'mkbootimg_args.json')
             with open(json_file) as json_fd:
                 actual_mkbootimg_args = json.load(json_fd)
                 self.assertEqual(actual_mkbootimg_args,
@@ -535,11 +541,11 @@ class MkbootimgTest(unittest.TestCase):
             # Output image path.
             boot_img = os.path.join(temp_out_dir, 'boot.img')
             # Creates blank images first.
-            kernel = create_blank_file(
+            kernel = generate_test_file(
                 os.path.join(temp_out_dir, 'kernel'), 0x1000)
-            ramdisk = create_blank_file(
+            ramdisk = generate_test_file(
                 os.path.join(temp_out_dir, 'ramdisk'), 0x1000)
-            second = create_blank_file(
+            second = generate_test_file(
                 os.path.join(temp_out_dir, 'second'), 0x1000)
 
             cmdline = (BOOT_ARGS_SIZE - 1) * 'x'
@@ -586,7 +592,8 @@ class MkbootimgTest(unittest.TestCase):
             subprocess.run(mkbootimg_cmds, check=True)
             subprocess.run(unpack_bootimg_cmds, check=True)
 
-            json_file = os.path.join(temp_out_dir, 'out', 'mkbootimg_args.json')
+            json_file = os.path.join(
+                temp_out_dir, 'out', 'mkbootimg_args.json')
             with open(json_file) as json_fd:
                 actual_mkbootimg_args = json.load(json_fd)
                 self.assertEqual(actual_mkbootimg_args,
@@ -595,11 +602,11 @@ class MkbootimgTest(unittest.TestCase):
     def test_boot_image_v2_cmdline_null_terminator(self):
         """Tests that kernel commandline is null-terminated."""
         with tempfile.TemporaryDirectory() as temp_out_dir:
-            dtb = create_blank_file(os.path.join(temp_out_dir, 'dtb'), 0x1000)
-            kernel = create_blank_file(os.path.join(temp_out_dir, 'kernel'),
-                                       0x1000)
-            ramdisk = create_blank_file(os.path.join(temp_out_dir, 'ramdisk'),
+            dtb = generate_test_file(os.path.join(temp_out_dir, 'dtb'), 0x1000)
+            kernel = generate_test_file(os.path.join(temp_out_dir, 'kernel'),
                                         0x1000)
+            ramdisk = generate_test_file(os.path.join(temp_out_dir, 'ramdisk'),
+                                         0x1000)
             cmdline = (BOOT_ARGS_SIZE - 1) * 'x'
             extra_cmdline = (BOOT_EXTRA_ARGS_SIZE - 1) * 'y'
             boot_img = os.path.join(temp_out_dir, 'boot.img')
@@ -627,10 +634,10 @@ class MkbootimgTest(unittest.TestCase):
     def test_boot_image_v3_cmdline_null_terminator(self):
         """Tests that kernel commandline is null-terminated."""
         with tempfile.TemporaryDirectory() as temp_out_dir:
-            kernel = create_blank_file(os.path.join(temp_out_dir, 'kernel'),
-                                       0x1000)
-            ramdisk = create_blank_file(os.path.join(temp_out_dir, 'ramdisk'),
+            kernel = generate_test_file(os.path.join(temp_out_dir, 'kernel'),
                                         0x1000)
+            ramdisk = generate_test_file(os.path.join(temp_out_dir, 'ramdisk'),
+                                         0x1000)
             cmdline = BOOT_ARGS_SIZE * 'x' + (BOOT_EXTRA_ARGS_SIZE - 1) * 'y'
             boot_img = os.path.join(temp_out_dir, 'boot.img')
             mkbootimg_cmds = [
@@ -653,9 +660,9 @@ class MkbootimgTest(unittest.TestCase):
     def test_vendor_boot_image_v3_cmdline_null_terminator(self):
         """Tests that kernel commandline is null-terminated."""
         with tempfile.TemporaryDirectory() as temp_out_dir:
-            dtb = create_blank_file(os.path.join(temp_out_dir, 'dtb'), 0x1000)
-            ramdisk = create_blank_file(os.path.join(temp_out_dir, 'ramdisk'),
-                                        0x1000)
+            dtb = generate_test_file(os.path.join(temp_out_dir, 'dtb'), 0x1000)
+            ramdisk = generate_test_file(os.path.join(temp_out_dir, 'ramdisk'),
+                                         0x1000)
             vendor_cmdline = (VENDOR_BOOT_ARGS_SIZE - 1) * 'x'
             vendor_boot_img = os.path.join(temp_out_dir, 'vendor_boot.img')
             mkbootimg_cmds = [
