@@ -402,7 +402,7 @@ def unpack_vendor_boot_image(args):
                 f'{VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE}I',
                 args.boot_img.read(
                     4 * VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE))
-            output_ramdisk_name = f'vendor_ramdisk{idx}'
+            output_ramdisk_name = f'vendor_ramdisk{idx:02}'
 
             image_info_list.append((ramdisk_offset_base + ramdisk_offset,
                                     ramdisk_size, output_ramdisk_name))
