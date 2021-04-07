@@ -19,7 +19,7 @@
 Extracts the kernel, ramdisk, second bootloader, dtb and recovery dtbo images.
 """
 
-from argparse import ArgumentParser, FileType
+from argparse import ArgumentParser, FileType, RawDescriptionHelpFormatter
 from struct import unpack
 import json
 import os
@@ -132,8 +132,11 @@ def get_boot_image_v3_args(header_version, os_version_patch_level, cmdline):
     return mkbootimg_args
 
 
-def unpack_bootimage(args):
+def unpack_boot_image(args):
     """extracts kernel, ramdisk, second bootloader and recovery dtbo"""
+    boot_magic = unpack('8s', args.boot_img.read(8))[0].decode()
+    print('boot_magic: %s' % boot_magic)
+
     kernel_ramdisk_second_info = unpack('9I', args.boot_img.read(9 * 4))
 
     # version is always at [8] regardless of version.
@@ -272,96 +275,119 @@ def unpack_bootimage(args):
                       os.path.join(args.out, image_info[2]))
 
 
-def get_vendor_boot_image_v3_args(
-    header_version, page_size, kernel_load_address, ramdisk_load_address,
-    cmdline, tags_load_address, product_name, dtb_load_address):
-    """Returns a dict of arguments to be used in mkbootimg.py later."""
-    mkbootimg_args = {}
-    mkbootimg_args['header_version'] = str(header_version)
-    # The type of pagesize is uint32_t, using '0xFFFFFFFF' as the output format.
-    mkbootimg_args['pagesize'] = '{:#010x}'.format(page_size)
+class VendorBootImageInfoFormatter:
+    """Formats the vendor_boot image info."""
 
-    # Kernel load address is base + kernel_offset in mkbootimg.py.
-    # However, we don't know the value of 'base' when unpack a vendor_boot.img
-    # in this script. So always set 'base' to be zero and 'kernel_offset' to
-    # be the kernel load address. Same for 'ramdisk_offset', 'tags_offset' and
-    # 'dtb_offset'.
-    # The following types are uint32_t, using '0xFFFFFFFF' as the output format.
-    mkbootimg_args['base'] = '{:#010x}'.format(0)
-    mkbootimg_args['kernel_offset'] = '{:#010x}'.format(kernel_load_address)
-    mkbootimg_args['ramdisk_offset'] = '{:#010x}'.format(ramdisk_load_address)
-    mkbootimg_args['tags_offset'] = '{:#010x}'.format(tags_load_address)
-    # The type of dtb_offset is uint64_t, using '0xFFFFFFFFEEEEEEEE' as
-    # the output format.
-    mkbootimg_args['dtb_offset'] = '{:#018x}'.format(dtb_load_address)
+    def format_pretty_text(self):
+        lines = []
+        lines.append(f'boot magic: {self.boot_magic}')
+        lines.append(f'vendor boot image header version: {self.header_version}')
+        lines.append(f'page size: {self.page_size:#010x}')
+        lines.append(f'kernel load address: {self.kernel_load_address:#010x}')
+        lines.append(f'ramdisk load address: {self.ramdisk_load_address:#010x}')
+        if self.header_version > 3:
+            lines.append(
+                f'vendor ramdisk total size: {self.vendor_ramdisk_size}')
+        else:
+            lines.append(f'vendor ramdisk size: {self.vendor_ramdisk_size}')
+        lines.append(f'vendor command line args: {self.cmdline}')
+        lines.append(
+            f'kernel tags load address: {self.tags_load_address:#010x}')
+        lines.append(f'product name: {self.product_name}')
+        lines.append(f'vendor boot image header size: {self.header_size}')
+        lines.append(f'dtb size: {self.dtb_size}')
+        lines.append(f'dtb address: {self.dtb_load_address:#018x}')
+        if self.header_version > 3:
+            lines.append(
+                f'vendor ramdisk table size: {self.vendor_ramdisk_table_size}')
+            lines.append('vendor ramdisk table: [')
+            indent = lambda level: ' ' * 4 * level
+            for entry in self.vendor_ramdisk_table:
+                (output_ramdisk_name, ramdisk_size, ramdisk_offset,
+                 ramdisk_type, ramdisk_name, board_id) = entry
+                lines.append(indent(1) + f'{output_ramdisk_name}: ''{')
+                lines.append(indent(2) + f'size: {ramdisk_size}')
+                lines.append(indent(2) + f'offset: {ramdisk_offset}')
+                lines.append(indent(2) + f'type: {ramdisk_type:#x}')
+                lines.append(indent(2) + f'name: {ramdisk_name}')
+                lines.append(indent(2) + 'board_id: [')
+                stride = 4
+                for row_idx in range(0, len(board_id), stride):
+                    row = board_id[row_idx:row_idx + stride]
+                    lines.append(
+                        indent(3) + ' '.join(f'{e:#010x},' for e in row))
+                lines.append(indent(2) + ']')
+                lines.append(indent(1) + '}')
+            lines.append(']')
+            lines.append(
+                f'vendor bootconfig size: {self.vendor_bootconfig_size}')
 
-    mkbootimg_args['vendor_cmdline'] = cmdline
-    mkbootimg_args['board'] = product_name
+        return '\n'.join(lines)
 
-    return mkbootimg_args
+    def format_json_dict(self):
+        """Returns a dict of arguments to be used in mkbootimg.py later."""
+        args_dict = {}
+        args_dict['header_version'] = str(self.header_version)
+
+        # Format uint32_t as '0xFFFFFFFF', uint64_t as '0xFFFFFFFFEEEEEEEE'.
+        args_dict['pagesize'] = f'{self.page_size:#010x}'
+
+        # Kernel load address is base + kernel_offset in mkbootimg.py.
+        # However, we don't know the value of 'base' when unpacking a
+        # vendor_boot.img in this script. So always set 'base' to be zero and
+        # 'kernel_offset' to be the kernel load address. Same for
+        # 'ramdisk_offset', 'tags_offset' and 'dtb_offset'.
+        args_dict['base'] = f'{0:#010x}'
+        args_dict['kernel_offset'] = f'{self.kernel_load_address:#010x}'
+        args_dict['ramdisk_offset'] = f'{self.ramdisk_load_address:#010x}'
+        args_dict['tags_offset'] = f'{self.tags_load_address:#010x}'
+        # The type of dtb_offset is uint64_t.
+        args_dict['dtb_offset'] = f'{self.dtb_load_address:#018x}'
+
+        args_dict['vendor_cmdline'] = self.cmdline
+        args_dict['board'] = self.product_name
+
+        # TODO(bowgotsai): support for multiple vendor ramdisk (vendor boot v4).
+        return args_dict
 
 
-def unpack_vendor_bootimage(args):
-    kernel_ramdisk_info = unpack('5I', args.boot_img.read(5 * 4))
-    header_version = kernel_ramdisk_info[0]
-    page_size = kernel_ramdisk_info[1]
-    kernel_load_address = kernel_ramdisk_info[2]
-    ramdisk_load_address = kernel_ramdisk_info[3]
-    ramdisk_size = kernel_ramdisk_info[4]
-    print('vendor boot image header version: %s' % header_version)
-    print('page size: %#x' % page_size)
-    print('kernel load address: %#x' % kernel_load_address)
-    print('ramdisk load address: %#x' % ramdisk_load_address)
-    if header_version > 3:
-        print('vendor ramdisk total size: %s' % ramdisk_size)
-    else:
-        print('vendor ramdisk size: %s' % ramdisk_size)
+def unpack_vendor_boot_image(args):
+    info = VendorBootImageInfoFormatter()
+    info.boot_magic = unpack('8s', args.boot_img.read(8))[0].decode()
+    info.header_version = unpack('I', args.boot_img.read(4))[0]
+    info.page_size = unpack('I', args.boot_img.read(4))[0]
+    info.kernel_load_address = unpack('I', args.boot_img.read(4))[0]
+    info.ramdisk_load_address = unpack('I', args.boot_img.read(4))[0]
+    info.vendor_ramdisk_size = unpack('I', args.boot_img.read(4))[0]
+    info.cmdline = cstr(unpack('2048s', args.boot_img.read(2048))[0].decode())
+    info.tags_load_address = unpack('I', args.boot_img.read(4))[0]
+    info.product_name = cstr(unpack('16s', args.boot_img.read(16))[0].decode())
+    info.header_size = unpack('I', args.boot_img.read(4))[0]
+    info.dtb_size = unpack('I', args.boot_img.read(4))[0]
+    info.dtb_load_address = unpack('Q', args.boot_img.read(8))[0]
 
-    cmdline = cstr(unpack('2048s', args.boot_img.read(2048))[0].decode())
-    print('vendor command line args: %s' % cmdline)
-
-    tags_load_address = unpack('I', args.boot_img.read(1 * 4))[0]
-    print('kernel tags load address: %#x' % tags_load_address)
-
-    product_name = cstr(unpack('16s', args.boot_img.read(16))[0].decode())
-    print('product name: %s' % product_name)
-
-    header_size = unpack('I', args.boot_img.read(4))[0]
-    print('vendor boot image header size: %s' % header_size)
-
-    dtb_size = unpack('I', args.boot_img.read(4))[0]
-    print('dtb size: %s' % dtb_size)
-    dtb_load_address = unpack('Q', args.boot_img.read(8))[0]
-    print('dtb address: %#x' % dtb_load_address)
-
-    # Saves the arguments to be reused in mkbootimg.py later.
-    # TODO(bowgotsai): support for multiple vendor ramdisk (vendor boot v4).
-    mkbootimg_args = get_vendor_boot_image_v3_args(
-        header_version, page_size, kernel_load_address, ramdisk_load_address,
-        cmdline, tags_load_address, product_name, dtb_load_address)
-
-    with open(os.path.join(args.out, MKBOOTIMG_ARGS_FILE), 'w') as f:
-        json.dump(mkbootimg_args, f, sort_keys=True, indent=4)
-
+    # Convenient shorthand.
+    page_size = info.page_size
     # The first pages contain the boot header
-    num_boot_header_pages = get_number_of_pages(header_size, page_size)
-    num_boot_ramdisk_pages = get_number_of_pages(ramdisk_size, page_size)
-    num_boot_dtb_pages = get_number_of_pages(dtb_size, page_size)
+    num_boot_header_pages = get_number_of_pages(info.header_size, page_size)
+    num_boot_ramdisk_pages = get_number_of_pages(
+        info.vendor_ramdisk_size, page_size)
+    num_boot_dtb_pages = get_number_of_pages(info.dtb_size, page_size)
 
     ramdisk_offset_base = page_size * num_boot_header_pages
     image_info_list = []
 
-    if header_version > 3:
-        vendor_ramdisk_table_size = unpack('I', args.boot_img.read(4))[0]
+    if info.header_version > 3:
+        info.vendor_ramdisk_table_size = unpack('I', args.boot_img.read(4))[0]
         vendor_ramdisk_table_entry_num = unpack('I', args.boot_img.read(4))[0]
         vendor_ramdisk_table_entry_size = unpack('I', args.boot_img.read(4))[0]
+        info.vendor_bootconfig_size = unpack('I', args.boot_img.read(4))[0]
         num_vendor_ramdisk_table_pages = get_number_of_pages(
-            vendor_ramdisk_table_size, page_size)
-        vendor_bootconfig_size = unpack('I', args.boot_img.read(4))[0]
+            info.vendor_ramdisk_table_size, page_size)
         vendor_ramdisk_table_offset = page_size * (
             num_boot_header_pages + num_boot_ramdisk_pages + num_boot_dtb_pages)
-        print('vendor ramdisk table size: {}'.format(vendor_ramdisk_table_size))
-        print('vendor ramdisk table: [')
+
+        vendor_ramdisk_table = []
         for idx in range(vendor_ramdisk_table_entry_num):
             entry_offset = vendor_ramdisk_table_offset + (
                 vendor_ramdisk_table_entry_size * idx)
@@ -370,68 +396,67 @@ def unpack_vendor_bootimage(args):
             ramdisk_offset = unpack('I', args.boot_img.read(4))[0]
             ramdisk_type = unpack('I', args.boot_img.read(4))[0]
             ramdisk_name = cstr(unpack(
-                '{}s'.format(VENDOR_RAMDISK_NAME_SIZE),
+                f'{VENDOR_RAMDISK_NAME_SIZE}s',
                 args.boot_img.read(VENDOR_RAMDISK_NAME_SIZE))[0].decode())
-            board_id_size = VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE
-            board_id = unpack('{}I'.format(board_id_size),
-                              args.boot_img.read(board_id_size * 4))
+            board_id = unpack(
+                f'{VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE}I',
+                args.boot_img.read(
+                    4 * VENDOR_RAMDISK_TABLE_ENTRY_BOARD_ID_SIZE))
+            output_ramdisk_name = f'vendor_ramdisk{idx}'
 
-            indent = lambda level: ' ' * 4 * level
-            output_ramdisk_name = 'vendor_ramdisk{}'.format(idx)
-            print(indent(1) + '{}: {{'.format(output_ramdisk_name))
-            print(indent(2) + 'size: {}'.format(ramdisk_size))
-            print(indent(2) + 'offset: {}'.format(ramdisk_offset))
-            print(indent(2) + 'type: {:#x}'.format(ramdisk_type))
-            print(indent(2) + 'name: {}'.format(ramdisk_name))
-            print(indent(2) + 'board_id: [')
-            stride = 4
-            for row_idx in range(0, len(board_id), stride):
-                row = board_id[row_idx:row_idx + stride]
-                print(indent(3) + ' '.join('{:#010x},'.format(e) for e in row))
-            print(indent(2) + ']')
-            print(indent(1) + '}')
             image_info_list.append((ramdisk_offset_base + ramdisk_offset,
                                     ramdisk_size, output_ramdisk_name))
-        print(']')
+            vendor_ramdisk_table.append(
+                (output_ramdisk_name, ramdisk_size, ramdisk_offset,
+                 ramdisk_type, ramdisk_name, board_id))
+
+        info.vendor_ramdisk_table = vendor_ramdisk_table
+
         bootconfig_offset = page_size * (num_boot_header_pages
             + num_boot_ramdisk_pages + num_boot_dtb_pages
             + num_vendor_ramdisk_table_pages)
-        image_info_list.append((bootconfig_offset, vendor_bootconfig_size,
+        image_info_list.append((bootconfig_offset, info.vendor_bootconfig_size,
             'bootconfig'))
-        print('vendor bootconfig size: {}'.format(vendor_bootconfig_size))
     else:
         image_info_list.append(
-            (ramdisk_offset_base, ramdisk_size, 'vendor_ramdisk'))
+            (ramdisk_offset_base, info.vendor_ramdisk_size, 'vendor_ramdisk'))
 
     dtb_offset = page_size * (num_boot_header_pages + num_boot_ramdisk_pages
                              ) # header + vendor_ramdisk
-    image_info_list.append((dtb_offset, dtb_size, 'dtb'))
+    image_info_list.append((dtb_offset, info.dtb_size, 'dtb'))
 
     for image_info in image_info_list:
         extract_image(image_info[0], image_info[1], args.boot_img,
                       os.path.join(args.out, image_info[2]))
+    info.image_dir = args.out
+
+    # Saves the arguments to be reused in mkbootimg.py later.
+    mkbootimg_args = info.format_json_dict()
+    with open(os.path.join(args.out, MKBOOTIMG_ARGS_FILE), 'w') as f:
+        json.dump(mkbootimg_args, f, sort_keys=True, indent=4)
+
+    print(info.format_pretty_text())
 
 
 def unpack_image(args):
     boot_magic = unpack('8s', args.boot_img.read(8))[0].decode()
-    print('boot_magic: %s' % boot_magic)
+    args.boot_img.seek(0)
     if boot_magic == 'ANDROID!':
-        unpack_bootimage(args)
+        unpack_boot_image(args)
     elif boot_magic == 'VNDRBOOT':
-        unpack_vendor_bootimage(args)
+        unpack_vendor_boot_image(args)
 
 
 def parse_cmdline():
     """parse command line arguments"""
     parser = ArgumentParser(
-        description='Unpacks boot.img/recovery.img/vendor_boot.img, extracts '
-        'the kernel, ramdisk, second bootloader, recovery dtbo and dtb')
-    parser.add_argument(
-        '--boot_img',
-        help='path to boot image',
-        type=FileType('rb'),
-        required=True)
-    parser.add_argument('--out', help='path to out binaries', default='out')
+        formatter_class=RawDescriptionHelpFormatter,
+        description='Unpacks boot, recovery or vendor_boot image.',
+    )
+    parser.add_argument('--boot_img', type=FileType('rb'), required=True,
+                        help='path to the boot, recovery or vendor_boot image')
+    parser.add_argument('--out', default='out',
+                        help='output directory of the unpacked images')
     return parser.parse_args()
 
 
