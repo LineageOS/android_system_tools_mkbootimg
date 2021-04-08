@@ -388,6 +388,7 @@ def unpack_vendor_boot_image(args):
             num_boot_header_pages + num_boot_ramdisk_pages + num_boot_dtb_pages)
 
         vendor_ramdisk_table = []
+        vendor_ramdisk_symlinks = []
         for idx in range(vendor_ramdisk_table_entry_num):
             entry_offset = vendor_ramdisk_table_offset + (
                 vendor_ramdisk_table_entry_size * idx)
@@ -406,6 +407,7 @@ def unpack_vendor_boot_image(args):
 
             image_info_list.append((ramdisk_offset_base + ramdisk_offset,
                                     ramdisk_size, output_ramdisk_name))
+            vendor_ramdisk_symlinks.append((output_ramdisk_name, ramdisk_name))
             vendor_ramdisk_table.append(
                 (output_ramdisk_name, ramdisk_size, ramdisk_offset,
                  ramdisk_type, ramdisk_name, board_id))
@@ -428,6 +430,19 @@ def unpack_vendor_boot_image(args):
     for image_info in image_info_list:
         extract_image(image_info[0], image_info[1], args.boot_img,
                       os.path.join(args.out, image_info[2]))
+
+    if info.header_version > 3:
+        vendor_ramdisk_by_name_dir = os.path.join(
+            args.out, 'ramdisk', 'by-name')
+        create_out_dir(vendor_ramdisk_by_name_dir)
+        for src, dst in vendor_ramdisk_symlinks:
+            src_pathname = os.path.join('..', '..', src)
+            dst_pathname = os.path.join(
+                vendor_ramdisk_by_name_dir, f'ramdisk_{dst}')
+            if os.path.lexists(dst_pathname):
+                os.remove(dst_pathname)
+            os.symlink(src_pathname, dst_pathname)
+
     info.image_dir = args.out
 
     # Saves the arguments to be reused in mkbootimg.py later.
