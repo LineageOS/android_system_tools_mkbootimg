@@ -16,10 +16,12 @@
 
 """Tests mkbootimg and unpack_bootimg."""
 
+import filecmp
 import json
 import logging
 import os
 import random
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -306,6 +308,102 @@ class MkbootimgTest(unittest.TestCase):
                     ' ' + '\n '.join(output),
                 ])
                 self.fail(msg)
+
+    def test_unpack_vendor_boot_image_v4_format_mkbootimg(self):
+        """Tests `unpack_bootimg --format=mkbootimg`."""
+        with tempfile.TemporaryDirectory() as temp_out_dir:
+            vendor_boot_img = os.path.join(temp_out_dir, 'vendor_boot.img')
+            vendor_boot_reconstructed = os.path.join(
+                temp_out_dir, 'vendor_boot.reconstructed')
+            dtb = generate_test_file(os.path.join(temp_out_dir, 'dtb'), 0x1000)
+            ramdisk1 = generate_test_file(
+                os.path.join(temp_out_dir, 'ramdisk1'), 0x121212)
+            ramdisk2 = generate_test_file(
+                os.path.join(temp_out_dir, 'ramdisk2'), 0x212121)
+            bootconfig = generate_test_file(
+                os.path.join(temp_out_dir, 'bootconfig'), 0x1000)
+
+            mkbootimg_cmds = [
+                'mkbootimg',
+                '--header_version', '4',
+                '--vendor_boot', vendor_boot_img,
+                '--dtb', dtb,
+                '--vendor_ramdisk', ramdisk1,
+                '--ramdisk_type', 'PLATFORM',
+                '--ramdisk_name', 'RAMDISK1',
+                '--vendor_ramdisk_fragment', ramdisk1,
+                '--ramdisk_type', 'DLKM',
+                '--ramdisk_name', 'RAMDISK2',
+                '--board_id0', '0xC0FFEE',
+                '--board_id15', '0x15151515',
+                '--vendor_ramdisk_fragment', ramdisk2,
+                '--vendor_bootconfig', bootconfig,
+            ]
+            unpack_bootimg_cmds = [
+                'unpack_bootimg',
+                '--boot_img', vendor_boot_img,
+                '--out', os.path.join(temp_out_dir, 'out'),
+                '--format=mkbootimg',
+            ]
+            subprocess.run(mkbootimg_cmds, check=True)
+            result = subprocess.run(unpack_bootimg_cmds, check=True,
+                                    capture_output=True, encoding='utf-8')
+            mkbootimg_cmds = [
+                'mkbootimg',
+                '--vendor_boot', vendor_boot_reconstructed,
+            ]
+            unpack_format_args = shlex.split(result.stdout)
+            mkbootimg_cmds.extend(unpack_format_args)
+
+            subprocess.run(mkbootimg_cmds, check=True)
+            self.assertTrue(
+                filecmp.cmp(vendor_boot_img, vendor_boot_reconstructed),
+                'reconstructed vendor_boot image differ from the original')
+
+            # Also check that -0, --null are as expected.
+            unpack_bootimg_cmds.append('--null')
+            result = subprocess.run(unpack_bootimg_cmds, check=True,
+                                    capture_output=True, encoding='utf-8')
+            unpack_format_null_args = result.stdout
+            self.assertEqual('\0'.join(unpack_format_args) + '\0',
+                             unpack_format_null_args)
+
+    def test_unpack_vendor_boot_image_v3_format_mkbootimg(self):
+        """Tests `unpack_bootimg --format=mkbootimg`."""
+        with tempfile.TemporaryDirectory() as temp_out_dir:
+            vendor_boot_img = os.path.join(temp_out_dir, 'vendor_boot.img')
+            vendor_boot_reconstructed = os.path.join(
+                temp_out_dir, 'vendor_boot.reconstructed')
+            dtb = generate_test_file(os.path.join(temp_out_dir, 'dtb'), 0x1000)
+            ramdisk1 = generate_test_file(
+                os.path.join(temp_out_dir, 'ramdisk1'), 0x121212)
+
+            mkbootimg_cmds = [
+                'mkbootimg',
+                '--header_version', '3',
+                '--vendor_boot', vendor_boot_img,
+                '--dtb', dtb,
+                '--vendor_ramdisk', ramdisk1,
+            ]
+            unpack_bootimg_cmds = [
+                'unpack_bootimg',
+                '--boot_img', vendor_boot_img,
+                '--out', os.path.join(temp_out_dir, 'out'),
+                '--format=mkbootimg',
+            ]
+            subprocess.run(mkbootimg_cmds, check=True)
+            result = subprocess.run(unpack_bootimg_cmds, check=True,
+                                    capture_output=True, encoding='utf-8')
+            mkbootimg_cmds = [
+                'mkbootimg',
+                '--vendor_boot', vendor_boot_reconstructed,
+            ]
+            mkbootimg_cmds.extend(shlex.split(result.stdout))
+
+            subprocess.run(mkbootimg_cmds, check=True)
+            self.assertTrue(
+                filecmp.cmp(vendor_boot_img, vendor_boot_reconstructed),
+                'reconstructed vendor_boot image differ from the original')
 
     def test_unpack_boot_image_v3_json_args(self):
         """Tests mkbootimg_args.json when unpacking a boot image version 3."""
