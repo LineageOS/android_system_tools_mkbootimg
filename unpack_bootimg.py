@@ -23,6 +23,7 @@ from argparse import ArgumentParser, FileType, RawDescriptionHelpFormatter
 from struct import unpack
 import json
 import os
+import shlex
 
 BOOT_IMAGE_HEADER_V3_PAGESIZE = 4096
 VENDOR_RAMDISK_NAME_SIZE = 32
@@ -136,6 +137,7 @@ def unpack_boot_image(args):
     """extracts kernel, ramdisk, second bootloader and recovery dtbo"""
     boot_magic = unpack('8s', args.boot_img.read(8))[0].decode()
     print('boot_magic: %s' % boot_magic)
+    # TODO(yochiang): Support --format=mkbootimg
 
     kernel_ramdisk_second_info = unpack('9I', args.boot_img.read(9 * 4))
 
@@ -324,6 +326,44 @@ class VendorBootImageInfoFormatter:
 
         return '\n'.join(lines)
 
+    def format_mkbootimg_argument(self, null=False):
+        args = []
+        args.extend(['--header_version', str(self.header_version)])
+        args.extend(['--pagesize', f'{self.page_size:#010x}'])
+        args.extend(['--base', f'{0:#010x}'])
+        args.extend(['--kernel_offset', f'{self.kernel_load_address:#010x}'])
+        args.extend(['--ramdisk_offset', f'{self.ramdisk_load_address:#010x}'])
+        args.extend(['--tags_offset', f'{self.tags_load_address:#010x}'])
+        args.extend(['--dtb_offset', f'{self.dtb_load_address:#018x}'])
+        args.extend(['--vendor_cmdline', self.cmdline])
+        args.extend(['--board', self.product_name])
+
+        dtb_path = os.path.join(self.image_dir, 'dtb')
+        args.extend(['--dtb', dtb_path])
+
+        if self.header_version > 3:
+            bootconfig_path = os.path.join(self.image_dir, 'bootconfig')
+            args.extend(['--vendor_bootconfig', bootconfig_path])
+
+            for entry in self.vendor_ramdisk_table:
+                (output_ramdisk_name, _, _, ramdisk_type,
+                 ramdisk_name, board_id) = entry
+                args.extend(['--ramdisk_type', str(ramdisk_type)])
+                args.extend(['--ramdisk_name', ramdisk_name])
+                for idx, e in enumerate(board_id):
+                    if e:
+                        args.extend([f'--board_id{idx}', f'{e:#010x}'])
+                vendor_ramdisk_path = os.path.join(
+                    self.image_dir, output_ramdisk_name)
+                args.extend(['--vendor_ramdisk_fragment', vendor_ramdisk_path])
+        else:
+            vendor_ramdisk_path = os.path.join(self.image_dir, 'vendor_ramdisk')
+            args.extend(['--vendor_ramdisk', vendor_ramdisk_path])
+
+        if null:
+            return '\0'.join(args) + '\0'
+        return shlex.join(args)
+
     def format_json_dict(self):
         """Returns a dict of arguments to be used in mkbootimg.py later."""
         args_dict = {}
@@ -435,7 +475,11 @@ def unpack_vendor_boot_image(args):
     with open(os.path.join(args.out, MKBOOTIMG_ARGS_FILE), 'w') as f:
         json.dump(mkbootimg_args, f, sort_keys=True, indent=4)
 
-    print(info.format_pretty_text())
+    if args.format == 'mkbootimg':
+        print(info.format_mkbootimg_argument(null=args.null),
+              end='' if args.null else None)
+    else:
+        print(info.format_pretty_text())
 
 
 def unpack_image(args):
@@ -447,16 +491,53 @@ def unpack_image(args):
         unpack_vendor_boot_image(args)
 
 
+def get_unpack_usage():
+    return """Output format:
+
+  * info
+
+    Pretty-printed info-rich text format suitable for human inspection.
+
+  * mkbootimg
+
+    Output shell-escaped (quoted) argument strings that can be used to
+    reconstruct the boot image. For example:
+
+    $ unpack_bootimg --boot_img vendor_boot.img --out out --format=mkbootimg |
+        tee mkbootimg_args
+    $ sh -c "mkbootimg $(cat mkbootimg_args) --vendor_boot repacked.img"
+
+    vendor_boot.img and repacked.img would be equivalent.
+
+    If the -0 option is specified, output unescaped null-terminated argument
+    strings that are suitable to be parsed by a shell script (xargs -0 format):
+
+    $ unpack_bootimg --boot_img vendor_boot.img --out out --format=mkbootimg \\
+        -0 | tee mkbootimg_args
+    $ declare -a MKBOOTIMG_ARGS=()
+    $ while IFS= read -r -d '' ARG; do
+        MKBOOTIMG_ARGS+=("${ARG}")
+      done <mkbootimg_args
+    $ mkbootimg "${MKBOOTIMG_ARGS[@]}" --vendor_boot repacked.img
+"""
+
+
 def parse_cmdline():
     """parse command line arguments"""
     parser = ArgumentParser(
         formatter_class=RawDescriptionHelpFormatter,
         description='Unpacks boot, recovery or vendor_boot image.',
+        epilog=get_unpack_usage(),
     )
     parser.add_argument('--boot_img', type=FileType('rb'), required=True,
                         help='path to the boot, recovery or vendor_boot image')
     parser.add_argument('--out', default='out',
                         help='output directory of the unpacked images')
+    parser.add_argument('--format', choices=['info', 'mkbootimg'],
+                        default='info',
+                        help='text output format (default: info)')
+    parser.add_argument('-0', '--null', action='store_true',
+                        help='output null-terminated argument strings')
     return parser.parse_args()
 
 
