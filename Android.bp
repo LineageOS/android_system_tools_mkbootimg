@@ -98,14 +98,11 @@ python_test_host {
     ],
     data: [
         ":avbtool",
+        ":mkbootimg",
+        ":unpack_bootimg",
         "tests/data/*",
     ],
-    required: [
-        "avbtool",
-        "mkbootimg",
-        "unpack_bootimg",
-    ],
-    test_suites: [
-        "general-tests",
-    ],
+    test_options: {
+        unit_test: true,
+    },
 }
