@@ -225,7 +225,6 @@ class BootImage:
                 command.extend(['--' + argname, value])
         return command
 
-
     def repack_bootimg(self):
         """Repacks the ramdisk and rebuild the boot.img"""
 
@@ -252,25 +251,29 @@ class BootImage:
         subprocess.check_call(mkbootimg_cmd)
         print("=== Repacked boot image: '{}' ===".format(self._bootimg))
 
-
     def add_files(self, src_dir, files):
         """Copy files from the src_dir into current ramdisk.
 
         Args:
             src_dir: a source dir containing the files to copy from.
-            files: a list of files to copy from src_dir.
+            files: a list of files or src_file:dst_file pairs to copy from
+              src_dir to the current ramdisk.
         """
         # Creates missing parent dirs with 0o755.
         original_mask = os.umask(0o022)
         for f in files:
-            src_file = os.path.join(src_dir, f)
-            dst_file = os.path.join(self.ramdisk_dir, f)
+            if ':' in f:
+                src_file = os.path.join(src_dir, f.split(':')[0])
+                dst_file = os.path.join(self.ramdisk_dir, f.split(':')[1])
+            else:
+                src_file = os.path.join(src_dir, f)
+                dst_file = os.path.join(self.ramdisk_dir, f)
+
             dst_dir = os.path.dirname(dst_file)
             if not os.path.exists(dst_dir):
                 print("Creating dir '{}'".format(dst_dir))
                 os.makedirs(dst_dir, 0o755)
-            print("Copying file '{}' into '{}'".format(
-                src_file, self._bootimg))
+            print("Copying file '{}' into '{}'".format(src_file, dst_file))
             shutil.copy2(src_file, dst_file)
         os.umask(original_mask)
 
@@ -280,9 +283,47 @@ class BootImage:
         return self._ramdisk.ramdisk_dir
 
 
+def _get_repack_usage():
+    return """Usage examples:
+
+  * --ramdisk_add
+
+    Specifies a list of files or src_file:dst_file pairs to copy from
+    --src_bootimg's ramdisk into --dst_bootimg's ramdisk.
+
+    $ repack_bootimg \\
+        --src_bootimg boot-debug-5.4.img --dst_bootimg vendor_boot-debug.img \\
+        --ramdisk_add first_stage_ramdisk/userdebug_plat_sepolicy.cil:userdebug_plat_sepolicy.cil
+
+    The above command copies '/first_stage_ramdisk/userdebug_plat_sepolicy.cil'
+    from --src_bootimg's ramdisk to '/userdebug_plat_sepolicy.cil' of
+    --dst_bootimg's ramdisk, then repacks the --dst_bootimg.
+
+    $ repack_bootimg \\
+        --src_bootimg boot-debug-5.4.img --dst_bootimg vendor_boot-debug.img \\
+        --ramdisk_add first_stage_ramdisk/userdebug_plat_sepolicy.cil
+
+    This is similar to the previous example, but the source file path and
+    destination file path are the same:
+        '/first_stage_ramdisk/userdebug_plat_sepolicy.cil'.
+
+    We can also combine both usage together with a list of copy instructions.
+    For example:
+
+    $ repack_bootimg \\
+        --src_bootimg boot-debug-5.4.img --dst_bootimg vendor_boot-debug.img \\
+        --ramdisk_add file1 file2:/subdir/file2 file3
+"""
+
+
 def _parse_args():
     """Parse command-line options."""
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description='Repacks boot, recovery or vendor_boot image by importing'
+                    'ramdisk files from --src_bootimg to --dst_bootimg.',
+        epilog=_get_repack_usage(),
+    )
 
     parser.add_argument(
         '--src_bootimg', help='filename to source boot image',
@@ -291,8 +332,10 @@ def _parse_args():
         '--dst_bootimg', help='filename to destination boot image',
         type=str, required=True)
     parser.add_argument(
-        '--ramdisk_add', help='a list of files to add into the ramdisk',
-        nargs='+', default=['first_stage_ramdisk/userdebug_plat_sepolicy.cil']
+        '--ramdisk_add', nargs='+',
+        help='a list of files or src_file:dst_file pairs to add into '
+             'the ramdisk',
+        default=['first_stage_ramdisk/userdebug_plat_sepolicy.cil']
     )
 
     return parser.parse_args()
