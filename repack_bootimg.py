@@ -335,7 +335,7 @@ def _parse_args():
         '--ramdisk_add', nargs='+',
         help='a list of files or src_file:dst_file pairs to add into '
              'the ramdisk',
-        default=['first_stage_ramdisk/userdebug_plat_sepolicy.cil']
+        default=['userdebug_plat_sepolicy.cil']
     )
 
     return parser.parse_args()
