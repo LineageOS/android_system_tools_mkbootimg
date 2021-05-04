@@ -115,18 +115,10 @@ class RamdiskImage:
             # toybox cpio arguments:
             #   -i: extract files from stdin
             #   -d: create directories if needed
-            cpio_result = subprocess.run(
-                ['toybox', 'cpio', '-id'], check=False,
-                input=decompressed_result.stdout, capture_output=True,
-                cwd=self._ramdisk_dir)
-
-            # toybox cpio command might return a non-zero code, e.g., found
-            # duplicated files in the ramdisk. Treat it as non-fatal with
-            # check=False and only print the error message here.
-            if cpio_result.returncode != 0:
-                print('\n'
-                      'WARNNING: cpio command error:\n' +
-                      cpio_result.stderr.decode('utf-8').strip() + '\n')
+            #   -u: override existing files
+            subprocess.run(
+                ['toybox', 'cpio', '-idu'], check=True,
+                input=decompressed_result.stdout, cwd=self._ramdisk_dir)
 
             print("=== Unpacked ramdisk: '{}' ===".format(
                 self._ramdisk_img))
