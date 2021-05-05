@@ -192,17 +192,7 @@ class BootImage:
         ]
         result = subprocess.run(unpack_bootimg_cmds, check=True,
                                 capture_output=True, encoding='utf-8')
-        ignore_next = False
-        for arg in shlex.split(result.stdout):
-            if ignore_next:
-                ignore_next = False
-                continue
-            # Skips the original ramdisk since we'll pack a new ramdisk.
-            if arg in {'--ramdisk', '--vendor_ramdisk'}:
-                ignore_next = True
-                continue
-            self._previous_mkbootimg_args.append(arg)
-
+        self._previous_mkbootimg_args = shlex.split(result.stdout)
         print("=== Unpacked boot image: '{}' ===".format(self._bootimg))
 
         # From the output dir, checks there is 'ramdisk' or 'vendor_ramdisk'.
@@ -239,16 +229,15 @@ class BootImage:
         # Uses previous mkbootimg args, e.g., --vendor_cmdline, --dtb_offset.
         mkbootimg_cmd.extend(self._previous_mkbootimg_args)
 
+        ramdisk_option = ''
         if self._bootimg_type == BootImageType.BOOT_IMAGE:
-            mkbootimg_cmd.extend(['--ramdisk', new_ramdisk])
+            ramdisk_option = '--ramdisk'
             mkbootimg_cmd.extend(['--output', self._bootimg])
         elif self._bootimg_type == BootImageType.VENDOR_BOOT_IMAGE:
-            mkbootimg_cmd.extend(['--vendor_ramdisk', new_ramdisk])
+            ramdisk_option = '--vendor_ramdisk'
             mkbootimg_cmd.extend(['--vendor_boot', self._bootimg])
         elif self._bootimg_type == BootImageType.SINGLE_RAMDISK_FRAGMENT:
-            ramdisk_index = (
-                mkbootimg_cmd.index('--vendor_ramdisk_fragment') + 1)
-            mkbootimg_cmd[ramdisk_index] = new_ramdisk
+            ramdisk_option = '--vendor_ramdisk_fragment'
             mkbootimg_cmd.extend(['--vendor_boot', self._bootimg])
         elif self._bootimg_type == BootImageType.MULTIPLE_RAMDISK_FRAGMENTS:
             mkbootimg_cmd.extend(['--ramdisk_type', 'PLATFORM'])
@@ -258,6 +247,14 @@ class BootImage:
             mkbootimg_cmd.extend(['--ramdisk_name', ramdisk_name])
             mkbootimg_cmd.extend(['--vendor_ramdisk_fragment', new_ramdisk])
             mkbootimg_cmd.extend(['--vendor_boot', self._bootimg])
+
+        if ramdisk_option and ramdisk_option not in mkbootimg_cmd:
+            raise RuntimeError("Failed to find '{}' from:\n  {}".format(
+                ramdisk_option, shlex.join(mkbootimg_cmd)))
+        # Replaces the original ramdisk with the newly packed ramdisk.
+        if ramdisk_option:
+            ramdisk_index = mkbootimg_cmd.index(ramdisk_option) + 1
+            mkbootimg_cmd[ramdisk_index] = new_ramdisk
 
         subprocess.check_call(mkbootimg_cmd)
         print("=== Repacked boot image: '{}' ===".format(self._bootimg))
