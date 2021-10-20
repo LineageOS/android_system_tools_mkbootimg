@@ -286,43 +286,34 @@ class BootImage:
 def _get_repack_usage():
     return """Usage examples:
 
-  * --ramdisk_add
+  * --ramdisk_add SRC_FILE:DST_FILE
 
-    Specifies a list of files or src_file:dst_file pairs to copy.
-    If --src_bootimg is specified, copy files from the ramdisk of --src_bootimg
-    into the ramdisk of --dst_bootimg.
-    If --local is given, copy files from the local filesystem into the ramdisk
-    of --dst_bootimg.
+    If --local is given, copy SRC_FILE from the local filesystem to DST_FILE in
+    the ramdisk of --dst_bootimg.
+    If --src_bootimg is specified, copy SRC_FILE from the ramdisk of
+    --src_bootimg to DST_FILE in the ramdisk of --dst_bootimg.
+
+    Copies a local file 'userdebug_plat_sepolicy.cil' into the ramdisk of
+    --dst_bootimg, and then rebuild --dst_bootimg:
+
+    $ %(prog)s \\
+        --local --dst_bootimg vendor_boot-debug.img \\
+        --ramdisk_add userdebug_plat_sepolicy.cil:userdebug_plat_sepolicy.cil
+
+    Copies 'first_stage_ramdisk/userdebug_plat_sepolicy.cil' from the ramdisk
+    of --src_bootimg to 'userdebug_plat_sepolicy.cil' in the ramdisk of
+    --dst_bootimg, and then rebuild --dst_bootimg:
 
     $ %(prog)s \\
         --src_bootimg boot-debug-5.4.img --dst_bootimg vendor_boot-debug.img \\
         --ramdisk_add first_stage_ramdisk/userdebug_plat_sepolicy.cil:userdebug_plat_sepolicy.cil
 
-    The above command copies 'first_stage_ramdisk/userdebug_plat_sepolicy.cil'
-    from the ramdisk of --src_bootimg to 'userdebug_plat_sepolicy.cil' of the
-    ramdisk of --dst_bootimg, then repacks the --dst_bootimg.
+    This option can be specified multiple times to copy multiple files:
 
     $ %(prog)s \\
         --local --dst_bootimg vendor_boot-debug.img \\
-        --ramdisk_add userdebug_plat_sepolicy.cil
-
-    The above command copies a local file 'userdebug_plat_sepolicy.cil' into the
-    ramdisk of --dst_bootimg.
-
-    $ %(prog)s \\
-        --src_bootimg boot-debug-5.4.img --dst_bootimg vendor_boot-debug.img \\
-        --ramdisk_add first_stage_ramdisk/userdebug_plat_sepolicy.cil
-
-    This is similar to the first example, but the source file path and
-    destination file path are the same:
-        'first_stage_ramdisk/userdebug_plat_sepolicy.cil'.
-
-    We can also combine both usage together with a list of copy instructions.
-    For example:
-
-    $ %(prog)s \\
-        --src_bootimg boot-debug-5.4.img --dst_bootimg vendor_boot-debug.img \\
-        --ramdisk_add file1 file2:subdir/file2 file3
+        --ramdisk_add file1:path/in/dst_bootimg/file1 \\
+        --ramdisk_add file2:path/in/dst_bootimg/file2
 """
 
 
@@ -347,11 +338,9 @@ def _parse_args():
         '--dst_bootimg', help='filename to destination boot image',
         type=BootImage, required=True)
     parser.add_argument(
-        '--ramdisk_add', nargs='+',
-        help='a list of files or src_file:dst_file pairs to add into '
-             'the ramdisk',
-        default=['userdebug_plat_sepolicy.cil']
-    )
+        '--ramdisk_add', metavar='SRC_FILE:DST_FILE',
+        help='a copy pair to copy into the ramdisk of --dst_bootimg',
+        action='extend', nargs='+', required=True)
 
     args = parser.parse_args()
 
