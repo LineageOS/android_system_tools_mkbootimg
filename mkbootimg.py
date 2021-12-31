@@ -26,8 +26,9 @@ import array
 import collections
 import os
 import re
-import subprocess
 import tempfile
+
+from gki.generate_gki_certificate import generate_gki_certificate
 
 # Constant and structure definition is in
 # system/tools/mkbootimg/include/bootimg/bootimg.h
@@ -539,9 +540,9 @@ def parse_cmdline():
                         help='GKI signing algorithm to use')
     parser.add_argument('--gki_signing_key',
                         help='path to RSA private key file')
-    parser.add_argument('--gki_signing_signature_args',
+    parser.add_argument('--gki_signing_signature_args', default='',
                         help='other hash arguments passed to avbtool')
-    parser.add_argument('--gki_signing_avbtool_path',
+    parser.add_argument('--gki_signing_avbtool_path', default='avbtool',
                         help='path to avbtool for boot signature generation')
     parser.add_argument('--vendor_boot', type=FileType('wb'),
                         help='vendor boot output file name')
@@ -584,41 +585,27 @@ def add_boot_image_signature(args, pagesize):
         pad_file(args.output, pagesize)
         return
 
-    avbtool = 'avbtool'  # Used from otatools.zip or Android build env.
-
-    # We need to specify the path of avbtool in build/core/Makefile.
-    # Because avbtool is not guaranteed to be in $PATH there.
-    if args.gki_signing_avbtool_path:
-        avbtool = args.gki_signing_avbtool_path
-
-    # Need to specify a value of --partition_size for avbtool to work.
-    # We use 64 MB below, but avbtool will not resize the boot image to
-    # this size because --do_not_append_vbmeta_image is also specified.
-    avbtool_cmd = [
-        avbtool, 'add_hash_footer',
-        '--partition_name', 'boot',
-        '--partition_size', str(64 * 1024 * 1024),
-        '--image', args.output.name,
-        '--algorithm', args.gki_signing_algorithm,
-        '--key', args.gki_signing_key,
-        '--salt', 'd00df00d']  # TODO: use a hash of kernel/ramdisk as the salt.
-
-    # Additional arguments passed to avbtool.
-    if args.gki_signing_signature_args:
-        avbtool_cmd += args.gki_signing_signature_args.split()
-
     # Outputs the signed vbmeta to a separate file, then append to boot.img
     # as the boot signature.
     with tempfile.TemporaryDirectory() as temp_out_dir:
         boot_signature_output = os.path.join(temp_out_dir, 'boot_signature')
-        avbtool_cmd += ['--do_not_append_vbmeta_image',
-                        '--output_vbmeta_image', boot_signature_output]
-        subprocess.check_call(avbtool_cmd)
+        generate_gki_certificate(
+            image=args.output.name, avbtool=args.gki_signing_avbtool_path,
+            name='boot', algorithm=args.gki_signing_algorithm,
+            key=args.gki_signing_key, salt='d00df00d',
+            additional_avb_args=args.gki_signing_signature_args.split(),
+            output=boot_signature_output,
+        )
         with open(boot_signature_output, 'rb') as boot_signature:
-            if filesize(boot_signature) > BOOT_IMAGE_V4_SIGNATURE_SIZE:
+            boot_signature_bytes = boot_signature.read()
+            if len(boot_signature_bytes) > BOOT_IMAGE_V4_SIGNATURE_SIZE:
                 raise ValueError(
                     f'boot sigature size is > {BOOT_IMAGE_V4_SIGNATURE_SIZE}')
-            write_padded_file(args.output, boot_signature, pagesize)
+            boot_signature_bytes += b'\x00' * (
+                BOOT_IMAGE_V4_SIGNATURE_SIZE - len(boot_signature_bytes))
+            assert len(boot_signature_bytes) == BOOT_IMAGE_V4_SIGNATURE_SIZE
+            args.output.write(boot_signature_bytes)
+            pad_file(args.output, pagesize)
 
 
 def write_data(args, pagesize):
