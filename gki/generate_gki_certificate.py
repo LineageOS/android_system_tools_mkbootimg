@@ -45,3 +45,42 @@ def generate_gki_certificate(image, avbtool, name, algorithm, key, salt,
     avbtool_cmd += additional_avb_args
 
     subprocess.check_call(avbtool_cmd)
+
+
+def parse_cmdline():
+    parser = ArgumentParser(add_help=True)
+
+    # Required args.
+    parser.add_argument('image', help='path to the image')
+    parser.add_argument('-o', '--output', required=True,
+                        help='output certificate file name')
+    parser.add_argument('--name', required=True,
+                        choices=['generic_kernel', 'generic_ramdisk'],
+                        help='name of the image to be certified')
+    parser.add_argument('--algorithm', required=True,
+                        help='AVB signing algorithm')
+    parser.add_argument('--key', required=True,
+                        help='path to the RSA private key')
+
+    # Optional args.
+    parser.add_argument('--avbtool', default='avbtool',
+                        help='path to the avbtool executable')
+    parser.add_argument('--salt', help='salt to use when computing image hash')
+    parser.add_argument('--additional_avb_args', default='',
+                        help='additional arguments to be forwarded to avbtool')
+
+    return parser.parse_args()
+
+
+def main():
+    args = parse_cmdline()
+    generate_gki_certificate(
+        image=args.image, avbtool=args.avbtool, name=args.name,
+        algorithm=args.algorithm, key=args.key, salt=args.salt,
+        additional_avb_args=args.additional_avb_args.split(),
+        output=args.output,
+    )
+
+
+if __name__ == '__main__':
+    main()
