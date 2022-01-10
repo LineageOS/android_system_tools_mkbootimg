@@ -66,10 +66,17 @@ def parse_cmdline():
     parser.add_argument('--avbtool', default='avbtool',
                         help='path to the avbtool executable')
     parser.add_argument('--salt', help='salt to use when computing image hash')
-    parser.add_argument('--additional_avb_args', default='',
+    parser.add_argument('--additional_avb_args', default=[], action='append',
                         help='additional arguments to be forwarded to avbtool')
 
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    additional_avb_args = []
+    for a in args.additional_avb_args:
+        additional_avb_args.extend(a.split())
+    args.additional_avb_args = additional_avb_args
+
+    return args
 
 
 def main():
@@ -77,7 +84,7 @@ def main():
     generate_gki_certificate(
         image=args.image, avbtool=args.avbtool, name=args.name,
         algorithm=args.algorithm, key=args.key, salt=args.salt,
-        additional_avb_args=args.additional_avb_args.split(),
+        additional_avb_args=args.additional_avb_args,
         output=args.output,
     )
 
