@@ -53,6 +53,8 @@ def cstr(s):
 
 
 def format_os_version(os_version):
+    if os_version == 0:
+        return None
     a = os_version >> 14
     b = os_version >> 7 & ((1<<7) - 1)
     c = os_version & ((1<<7) - 1)
@@ -60,6 +62,8 @@ def format_os_version(os_version):
 
 
 def format_os_patch_level(os_patch_level):
+    if os_patch_level == 0:
+        return None
     y = os_patch_level >> 4
     y += 2000
     m = os_patch_level & ((1<<4) - 1)
@@ -130,11 +134,17 @@ class BootImageInfoFormatter:
     def format_mkbootimg_argument(self):
         args = []
         args.extend(['--header_version', str(self.header_version)])
-        args.extend(['--os_version', self.os_version])
-        args.extend(['--os_patch_level', self.os_patch_level])
+        if self.os_version:
+            args.extend(['--os_version', self.os_version])
+        if self.os_patch_level:
+            args.extend(['--os_patch_level', self.os_patch_level])
 
         args.extend(['--kernel', os.path.join(self.image_dir, 'kernel')])
         args.extend(['--ramdisk', os.path.join(self.image_dir, 'ramdisk')])
+
+        if self.header_version >= 4 and self.boot_signature_size > 0:
+            args.extend(['--boot_signature',
+                         os.path.join(self.image_dir, 'boot_signature')])
 
         if self.header_version <= 2:
             if self.second_size > 0:
