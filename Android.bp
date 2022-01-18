@@ -54,18 +54,6 @@ python_defaults {
 }
 
 python_binary_host {
-    name: "generate_gki_certificate",
-    defaults: ["mkbootimg_defaults"],
-    main: "gki/generate_gki_certificate.py",
-    srcs: [
-        "gki/generate_gki_certificate.py",
-    ],
-    required: [
-        "avbtool",
-    ],
-}
-
-python_binary_host {
     name: "mkbootimg",
     defaults: ["mkbootimg_defaults"],
     main: "mkbootimg.py",
