@@ -46,3 +46,31 @@ sh_test_host {
         "general-tests",
     ],
 }
+
+genrule {
+    name: "gki_retrofitting_tools",
+    tools: [
+        "soong_zip",
+        "retrofit_gki",
+        "mkbootimg",
+        "unpack_bootimg",
+    ],
+    srcs: [
+        "README.md",
+    ],
+    cmd: "STAGE_DIR=$(genDir)/gki_retrofitting_tools && " +
+         "rm -rf $${STAGE_DIR} && mkdir -p $${STAGE_DIR} && " +
+         "cp $(location retrofit_gki) $${STAGE_DIR} && " +
+         "cp $(location mkbootimg) $${STAGE_DIR} && " +
+         "cp $(location unpack_bootimg) $${STAGE_DIR} && " +
+         "cp $(in) $${STAGE_DIR} && " +
+         "$(location soong_zip) -o $(out) -C $(genDir) -D $${STAGE_DIR}",
+    out: [
+        "gki_retrofitting_tools.zip",
+    ],
+    dist: {
+        targets: [
+            "gki_retrofitting_tools",
+        ],
+    },
+}
