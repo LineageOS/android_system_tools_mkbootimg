@@ -162,7 +162,7 @@ readonly RETROFITTED_BOOT_SIGNATURE_SIZE=$(( 16 << 10 ))
 ( [[ -n "${VERBOSE}" ]] && set -x
   "${UNPACK_BOOTIMG}" --boot_img "${BOOT_IMAGE}" --out "${BOOT_DIR}" >/dev/null
   "${UNPACK_BOOTIMG}" --boot_img "${INIT_BOOT_IMAGE}" --out "${INIT_BOOT_DIR}" >/dev/null
-  cat "${BOOT_DIR}/boot_signature" "${INIT_BOOT_DIR}/boot_signature" > "${OUTPUT_BOOT_SIGNATURE}"
+  cp "${BOOT_DIR}/boot_signature" "${OUTPUT_BOOT_SIGNATURE}"
 )
 
 declare -a mkbootimg_args=()
