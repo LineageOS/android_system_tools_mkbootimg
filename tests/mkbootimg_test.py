@@ -213,8 +213,6 @@ class MkbootimgTest(unittest.TestCase):
             ramdisk = generate_test_file(os.path.join(temp_out_dir, 'ramdisk'),
                                          0x1000)
 
-            # The boot signature will be zeros if no
-            # --gki_signing_[algorithm|key] is provided.
             mkbootimg_cmds = [
                 'mkbootimg',
                 '--header_version', '4',
@@ -234,6 +232,8 @@ class MkbootimgTest(unittest.TestCase):
             subprocess.run(mkbootimg_cmds, check=True)
             subprocess.run(unpack_bootimg_cmds, check=True)
 
+            # The boot signature will be empty if no
+            # --gki_signing_[algorithm|key] is provided.
             boot_signature = os.path.join(temp_out_dir, 'out', 'boot_signature')
             self.assertFalse(os.path.exists(boot_signature))
 
@@ -424,15 +424,12 @@ class MkbootimgTest(unittest.TestCase):
                                         0x1000)
             ramdisk = generate_test_file(os.path.join(temp_out_dir, 'ramdisk'),
                                          0x1000)
-            boot_signature = generate_test_file(
-                os.path.join(temp_out_dir, 'boot_signature'), 0x800)
             mkbootimg_cmds = [
                 'mkbootimg',
                 '--header_version', '4',
                 '--kernel', kernel,
                 '--ramdisk', ramdisk,
                 '--cmdline', TEST_KERNEL_CMDLINE,
-                '--boot_signature', boot_signature,
                 '--output', boot_img,
             ]
             unpack_bootimg_cmds = [

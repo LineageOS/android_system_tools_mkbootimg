@@ -31,6 +31,7 @@ sh_binary_host {
     name: "retrofit_gki",
     src: "retrofit_gki.sh",
     required: [
+        "avbtool",
         "mkbootimg",
         "unpack_bootimg",
     ],
@@ -43,6 +44,7 @@ sh_test_host {
         "retrofit_gki.sh",
     ],
     data_bins: [
+        "avbtool",
         "mkbootimg",
         "unpack_bootimg",
     ],
@@ -56,6 +58,7 @@ genrule {
     tools: [
         "soong_zip",
         "retrofit_gki",
+        "avbtool",
         "mkbootimg",
         "unpack_bootimg",
     ],
@@ -65,6 +68,7 @@ genrule {
     cmd: "STAGE_DIR=$(genDir)/gki_retrofitting_tools && " +
          "rm -rf $${STAGE_DIR} && mkdir -p $${STAGE_DIR} && " +
          "cp $(location retrofit_gki) $${STAGE_DIR} && " +
+         "cp $(location avbtool) $${STAGE_DIR} && " +
          "cp $(location mkbootimg) $${STAGE_DIR} && " +
          "cp $(location unpack_bootimg) $${STAGE_DIR} && " +
          "cp $(in) $${STAGE_DIR} && " +
