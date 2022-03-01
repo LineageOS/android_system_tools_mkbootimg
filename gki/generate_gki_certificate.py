@@ -55,7 +55,7 @@ def parse_cmdline():
     parser.add_argument('-o', '--output', required=True,
                         help='output certificate file name')
     parser.add_argument('--name', required=True,
-                        choices=['generic_kernel', 'generic_ramdisk'],
+                        choices=['boot', 'generic_kernel'],
                         help='name of the image to be certified')
     parser.add_argument('--algorithm', required=True,
                         help='AVB signing algorithm')
