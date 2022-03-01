@@ -40,7 +40,6 @@ readonly TEST_KERNEL="${TEMP_DIR}/kernel"
 readonly TEST_RAMDISK="${TEMP_DIR}/ramdisk"
 readonly TEST_VENDOR_RAMDISK="${TEMP_DIR}/vendor_ramdisk"
 readonly TEST_KERNEL_SIGNATURE="${TEMP_DIR}/kernel.boot_signature"
-readonly TEST_RAMDISK_SIGNATURE="${TEMP_DIR}/ramdisk.boot_signature"
 
 readonly TEST_V2_RETROFITTED_RAMDISK="${TEMP_DIR}/retrofitted.ramdisk"
 readonly TEST_RETROFITTED_SIGNATURE="${TEMP_DIR}/retrofitted.boot_signature"
@@ -54,13 +53,12 @@ readonly TEST_VENDOR_BOOT_IMAGE="${TEMP_DIR}/vendor_boot.img"
   dd if=/dev/urandom of="${TEST_KERNEL}" bs=1024 count=10
   dd if=/dev/urandom of="${TEST_RAMDISK}" bs=1024 count=10
   dd if=/dev/urandom of="${TEST_KERNEL_SIGNATURE}" bs=1024 count=1
-  dd if=/dev/urandom of="${TEST_RAMDISK_SIGNATURE}" bs=1024 count=1
   dd if=/dev/urandom of="${TEST_DTB}" bs=1024 count=10
   dd if=/dev/urandom of="${TEST_VENDOR_RAMDISK}" bs=1024 count=10
 ) 2> /dev/null
 
 cat "${TEST_VENDOR_RAMDISK}" "${TEST_RAMDISK}" > "${TEST_V2_RETROFITTED_RAMDISK}"
-cat "${TEST_KERNEL_SIGNATURE}" "${TEST_RAMDISK_SIGNATURE}" > "${TEST_RETROFITTED_SIGNATURE}"
+cp "${TEST_KERNEL_SIGNATURE}" "${TEST_RETROFITTED_SIGNATURE}"
 cp "${TEST_RETROFITTED_SIGNATURE}" "${TEST_PADDED_RETROFITTED_SIGNATURE}"
 truncate -s $(( 16 << 10 )) "${TEST_PADDED_RETROFITTED_SIGNATURE}"
 
@@ -72,7 +70,6 @@ mkbootimg \
 mkbootimg \
   --header_version 4 \
   --ramdisk "${TEST_RAMDISK}" \
-  --boot_signature "${TEST_RAMDISK_SIGNATURE}" \
   --output "${TEST_INIT_BOOT_IMAGE}"
 mkbootimg \
   --header_version 4 \
