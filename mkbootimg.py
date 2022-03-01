@@ -106,8 +106,7 @@ def get_recovery_dtbo_offset(args):
 
 
 def should_add_legacy_gki_boot_signature(args):
-    if (args.boot_signature is None and args.gki_signing_key and
-            args.gki_signing_algorithm):
+    if args.gki_signing_key and args.gki_signing_algorithm:
         return True
     return False
 
@@ -135,9 +134,7 @@ def write_header_v3_and_above(args):
     if args.header_version >= 4:
         # The signature used to verify boot image v4.
         boot_signature_size = 0
-        if args.boot_signature:
-            boot_signature_size = filesize(args.boot_signature)
-        elif should_add_legacy_gki_boot_signature(args):
+        if should_add_legacy_gki_boot_signature(args):
             boot_signature_size = BOOT_IMAGE_V4_SIGNATURE_SIZE
         args.output.write(pack('I', boot_signature_size))
     pad_file(args.output, BOOT_IMAGE_HEADER_V3_PAGESIZE)
@@ -548,8 +545,6 @@ def parse_cmdline():
                         help='boot image header version')
     parser.add_argument('-o', '--output', type=FileType('wb'),
                         help='output file name')
-    parser.add_argument('--boot_signature', type=FileType('rb'),
-                        help='path to the GKI certificate file')
     parser.add_argument('--vendor_boot', type=FileType('wb'),
                         help='vendor boot output file name')
     parser.add_argument('--vendor_ramdisk', type=FileType('rb'),
@@ -595,16 +590,6 @@ def add_boot_image_signature(args, pagesize):
     vbmeta partition) via the Android Verified Boot process, when the
     device boots.
     """
-
-    if args.boot_signature:
-        write_padded_file(args.output, args.boot_signature, pagesize)
-        return
-
-    if not should_add_legacy_gki_boot_signature(args):
-        return
-
-    # Fallback to the legacy certificating method.
-
     # Flush the buffer for signature calculation.
     args.output.flush()
 
@@ -640,7 +625,7 @@ def write_data(args, pagesize):
         write_padded_file(args.output, args.recovery_dtbo, pagesize)
     if args.header_version == 2:
         write_padded_file(args.output, args.dtb, pagesize)
-    if args.header_version >= 4:
+    if args.header_version >= 4 and should_add_legacy_gki_boot_signature(args):
         add_boot_image_signature(args, pagesize)
 
 
