@@ -39,40 +39,32 @@ readonly TEST_DTB="${TEMP_DIR}/dtb"
 readonly TEST_KERNEL="${TEMP_DIR}/kernel"
 readonly TEST_RAMDISK="${TEMP_DIR}/ramdisk"
 readonly TEST_VENDOR_RAMDISK="${TEMP_DIR}/vendor_ramdisk"
-readonly TEST_KERNEL_SIGNATURE="${TEMP_DIR}/kernel.boot_signature"
-readonly TEST_RAMDISK_SIGNATURE="${TEMP_DIR}/ramdisk.boot_signature"
-
+readonly TEST_BOOT_SIGNATURE="${TEMP_DIR}/boot.boot_signature"
 readonly TEST_V2_RETROFITTED_RAMDISK="${TEMP_DIR}/retrofitted.ramdisk"
-readonly TEST_RETROFITTED_SIGNATURE="${TEMP_DIR}/retrofitted.boot_signature"
-readonly TEST_PADDED_RETROFITTED_SIGNATURE="${TEMP_DIR}/retrofitted.boot_signature.padded"
-
 readonly TEST_BOOT_IMAGE="${TEMP_DIR}/boot.img"
 readonly TEST_INIT_BOOT_IMAGE="${TEMP_DIR}/init_boot.img"
 readonly TEST_VENDOR_BOOT_IMAGE="${TEMP_DIR}/vendor_boot.img"
 
 ( # Run these in subshell because dd is noisy.
+  dd if=/dev/urandom of="${TEST_DTB}" bs=1024 count=10
   dd if=/dev/urandom of="${TEST_KERNEL}" bs=1024 count=10
   dd if=/dev/urandom of="${TEST_RAMDISK}" bs=1024 count=10
-  dd if=/dev/urandom of="${TEST_KERNEL_SIGNATURE}" bs=1024 count=1
-  dd if=/dev/urandom of="${TEST_RAMDISK_SIGNATURE}" bs=1024 count=1
-  dd if=/dev/urandom of="${TEST_DTB}" bs=1024 count=10
   dd if=/dev/urandom of="${TEST_VENDOR_RAMDISK}" bs=1024 count=10
+  dd if=/dev/urandom of="${TEST_BOOT_SIGNATURE}" bs=1024 count=16
 ) 2> /dev/null
 
 cat "${TEST_VENDOR_RAMDISK}" "${TEST_RAMDISK}" > "${TEST_V2_RETROFITTED_RAMDISK}"
-cat "${TEST_KERNEL_SIGNATURE}" "${TEST_RAMDISK_SIGNATURE}" > "${TEST_RETROFITTED_SIGNATURE}"
-cp "${TEST_RETROFITTED_SIGNATURE}" "${TEST_PADDED_RETROFITTED_SIGNATURE}"
-truncate -s $(( 16 << 10 )) "${TEST_PADDED_RETROFITTED_SIGNATURE}"
 
 mkbootimg \
   --header_version 4 \
   --kernel "${TEST_KERNEL}" \
-  --boot_signature "${TEST_KERNEL_SIGNATURE}" \
   --output "${TEST_BOOT_IMAGE}"
+cat "${TEST_BOOT_SIGNATURE}" >> "${TEST_BOOT_IMAGE}"
+avbtool add_hash_footer --image "${TEST_BOOT_IMAGE}" --partition_name boot --partition_size $((20 << 20))
+
 mkbootimg \
   --header_version 4 \
   --ramdisk "${TEST_RAMDISK}" \
-  --boot_signature "${TEST_RAMDISK_SIGNATURE}" \
   --output "${TEST_INIT_BOOT_IMAGE}"
 mkbootimg \
   --header_version 4 \
@@ -83,6 +75,7 @@ mkbootimg \
 
 readonly RETROFITTED_IMAGE="${TEMP_DIR}/retrofitted_boot.img"
 readonly RETROFITTED_IMAGE_DIR="${TEMP_DIR}/retrofitted_boot.img.unpack"
+readonly BOOT_SIGNATURE_SIZE=$(( 16 << 10 ))
 
 
 #
@@ -98,12 +91,13 @@ retrofit_gki.sh \
 
 rm -rf "${RETROFITTED_IMAGE_DIR}"
 unpack_bootimg --boot_img "${RETROFITTED_IMAGE}" --out "${RETROFITTED_IMAGE_DIR}" > /dev/null
+tail -c "${BOOT_SIGNATURE_SIZE}" "${RETROFITTED_IMAGE}" > "${RETROFITTED_IMAGE_DIR}/boot_signature"
 
 cmp -s "${TEST_KERNEL}" "${RETROFITTED_IMAGE_DIR}/kernel" ||
   die "unexpected diff: kernel"
 cmp -s "${TEST_RAMDISK}" "${RETROFITTED_IMAGE_DIR}/ramdisk" ||
   die "unexpected diff: ramdisk"
-cmp -s "${TEST_RETROFITTED_SIGNATURE}" "${RETROFITTED_IMAGE_DIR}/boot_signature" ||
+cmp -s "${TEST_BOOT_SIGNATURE}" "${RETROFITTED_IMAGE_DIR}/boot_signature" ||
   die "unexpected diff: boot signature"
 
 
@@ -117,13 +111,13 @@ retrofit_gki.sh \
 
 rm -rf "${RETROFITTED_IMAGE_DIR}"
 unpack_bootimg --boot_img "${RETROFITTED_IMAGE}" --out "${RETROFITTED_IMAGE_DIR}" > /dev/null
-tail -c $(( 16 << 10 )) "${RETROFITTED_IMAGE}" > "${RETROFITTED_IMAGE_DIR}/boot_signature"
+tail -c "${BOOT_SIGNATURE_SIZE}" "${RETROFITTED_IMAGE}" > "${RETROFITTED_IMAGE_DIR}/boot_signature"
 
 cmp -s "${TEST_KERNEL}" "${RETROFITTED_IMAGE_DIR}/kernel" ||
   die "unexpected diff: kernel"
 cmp -s "${TEST_RAMDISK}" "${RETROFITTED_IMAGE_DIR}/ramdisk" ||
   die "unexpected diff: ramdisk"
-cmp -s "${TEST_PADDED_RETROFITTED_SIGNATURE}" "${RETROFITTED_IMAGE_DIR}/boot_signature" ||
+cmp -s "${TEST_BOOT_SIGNATURE}" "${RETROFITTED_IMAGE_DIR}/boot_signature" ||
   die "unexpected diff: boot signature"
 
 
@@ -138,7 +132,7 @@ retrofit_gki.sh \
 
 rm -rf "${RETROFITTED_IMAGE_DIR}"
 unpack_bootimg --boot_img "${RETROFITTED_IMAGE}" --out "${RETROFITTED_IMAGE_DIR}" > /dev/null
-tail -c $(( 16 << 10 )) "${RETROFITTED_IMAGE}" > "${RETROFITTED_IMAGE_DIR}/boot_signature"
+tail -c "${BOOT_SIGNATURE_SIZE}" "${RETROFITTED_IMAGE}" > "${RETROFITTED_IMAGE_DIR}/boot_signature"
 
 cmp -s "${TEST_DTB}" "${RETROFITTED_IMAGE_DIR}/dtb" ||
   die "unexpected diff: dtb"
@@ -146,5 +140,5 @@ cmp -s "${TEST_KERNEL}" "${RETROFITTED_IMAGE_DIR}/kernel" ||
   die "unexpected diff: kernel"
 cmp -s "${TEST_V2_RETROFITTED_RAMDISK}" "${RETROFITTED_IMAGE_DIR}/ramdisk" ||
   die "unexpected diff: ramdisk"
-cmp -s "${TEST_PADDED_RETROFITTED_SIGNATURE}" "${RETROFITTED_IMAGE_DIR}/boot_signature" ||
+cmp -s "${TEST_BOOT_SIGNATURE}" "${RETROFITTED_IMAGE_DIR}/boot_signature" ||
   die "unexpected diff: boot signature"
