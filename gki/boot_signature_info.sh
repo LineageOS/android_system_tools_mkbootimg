@@ -57,6 +57,7 @@ readonly VBMETA_INFO="${VBMETA_IMAGE}.info"
 readonly BOOT_IMAGE="${TEMP_DIR}/boot.img"
 readonly BOOT_IMAGE_DIR="${TEMP_DIR}/boot.unpack_dir"
 readonly BOOT_IMAGE_ARGS="${TEMP_DIR}/boot.mkbootimg_args"
+readonly BOOT_SIGNATURE_SIZE=$(( 16 << 10 ))
 
 [[ -f "$1" ]] ||
   die "expected one input image"
@@ -74,10 +75,10 @@ while IFS= read -r -d '' ARG; do
 done < "${BOOT_IMAGE_ARGS}"
 
 BOOT_IMAGE_VERSION="$(get_arg --header_version "${boot_args[@]}")"
-if [[ "${BOOT_IMAGE_VERSION}" -ge 4 ]]; then
+if [[ "${BOOT_IMAGE_VERSION}" -ge 4 ]] && [[ -f "${BOOT_IMAGE_DIR}/boot_signature" ]]; then
   cp "${BOOT_IMAGE_DIR}/boot_signature" "${VBMETA_IMAGE}"
 else
-  tail -c "$(( 16 << 10 ))" "${BOOT_IMAGE}" > "${VBMETA_IMAGE}"
+  tail -c "${BOOT_SIGNATURE_SIZE}" "${BOOT_IMAGE}" > "${VBMETA_IMAGE}"
 fi
 
 # Keep carving out vbmeta image from the boot signature until we fail or EOF.

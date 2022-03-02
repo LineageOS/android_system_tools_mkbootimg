@@ -142,6 +142,7 @@ fi
 [[ -z "${OUTPUT_BOOT_IMAGE}" ]] &&
   die "argument '--output': cannot be empty"
 
+readonly BOOT_IMAGE_WITHOUT_AVB_FOOTER="${TEMP_DIR}/boot.img.without_avb_footer"
 readonly BOOT_DIR="${TEMP_DIR}/boot"
 readonly INIT_BOOT_DIR="${TEMP_DIR}/init_boot"
 readonly VENDOR_BOOT_DIR="${TEMP_DIR}/vendor_boot"
@@ -149,21 +150,29 @@ readonly VENDOR_BOOT_MKBOOTIMG_ARGS="${TEMP_DIR}/vendor_boot.mkbootimg_args"
 readonly OUTPUT_RAMDISK="${TEMP_DIR}/out.ramdisk"
 readonly OUTPUT_BOOT_SIGNATURE="${TEMP_DIR}/out.boot_signature"
 
+readonly AVBTOOL="${AVBTOOL:-avbtool}"
 readonly MKBOOTIMG="${MKBOOTIMG:-mkbootimg}"
 readonly UNPACK_BOOTIMG="${UNPACK_BOOTIMG:-unpack_bootimg}"
 
-# Fixed boot signature size for boot v2 & v3 for easy discovery in VTS.
-readonly RETROFITTED_BOOT_SIGNATURE_SIZE=$(( 16 << 10 ))
+# Fixed boot signature size for easy discovery in VTS.
+readonly BOOT_SIGNATURE_SIZE=$(( 16 << 10 ))
 
 
 #
 # Preparations are done. Now begin the actual work.
 #
+
+# Copy the boot image because `avbtool erase_footer` edits the file in-place.
+cp "${BOOT_IMAGE}" "${BOOT_IMAGE_WITHOUT_AVB_FOOTER}"
 ( [[ -n "${VERBOSE}" ]] && set -x
+  "${AVBTOOL}" erase_footer --image "${BOOT_IMAGE_WITHOUT_AVB_FOOTER}" 2>/dev/null ||:
+  tail -c "${BOOT_SIGNATURE_SIZE}" "${BOOT_IMAGE_WITHOUT_AVB_FOOTER}" > "${OUTPUT_BOOT_SIGNATURE}"
   "${UNPACK_BOOTIMG}" --boot_img "${BOOT_IMAGE}" --out "${BOOT_DIR}" >/dev/null
   "${UNPACK_BOOTIMG}" --boot_img "${INIT_BOOT_IMAGE}" --out "${INIT_BOOT_DIR}" >/dev/null
-  cat "${BOOT_DIR}/boot_signature" "${INIT_BOOT_DIR}/boot_signature" > "${OUTPUT_BOOT_SIGNATURE}"
 )
+if [[ "$(file_size "${OUTPUT_BOOT_SIGNATURE}")" -ne "${BOOT_SIGNATURE_SIZE}" ]]; then
+  die "boot signature size must be equal to ${BOOT_SIGNATURE_SIZE}"
+fi
 
 declare -a mkbootimg_args=()
 
@@ -172,7 +181,6 @@ if [[ "${OUTPUT_BOOT_IMAGE_VERSION}" -eq 4 ]]; then
     --header_version 4 \
     --kernel "${BOOT_DIR}/kernel" \
     --ramdisk "${INIT_BOOT_DIR}/ramdisk" \
-    --boot_signature "${OUTPUT_BOOT_SIGNATURE}" \
   )
 elif [[ "${OUTPUT_BOOT_IMAGE_VERSION}" -eq 3 ]]; then
   mkbootimg_args+=( \
@@ -219,15 +227,5 @@ fi
 
 ( [[ -n "${VERBOSE}" ]] && set -x
   "${MKBOOTIMG}" "${mkbootimg_args[@]}" --output "${OUTPUT_BOOT_IMAGE}"
+  cat "${OUTPUT_BOOT_SIGNATURE}" >> "${OUTPUT_BOOT_IMAGE}"
 )
-
-if [[ "${OUTPUT_BOOT_IMAGE_VERSION}" -eq 2 ]] || [[ "${OUTPUT_BOOT_IMAGE_VERSION}" -eq 3 ]]; then
-  if [[ "$(file_size "${OUTPUT_BOOT_SIGNATURE}")" -gt "${RETROFITTED_BOOT_SIGNATURE_SIZE}" ]]; then
-    die "boot signature size is larger than ${RETROFITTED_BOOT_SIGNATURE_SIZE}"
-  fi
-  # Pad the boot signature and append it to the end.
-  ( [[ -n "${VERBOSE}" ]] && set -x
-    truncate -s "${RETROFITTED_BOOT_SIGNATURE_SIZE}" "${OUTPUT_BOOT_SIGNATURE}"
-    cat "${OUTPUT_BOOT_SIGNATURE}" >> "${OUTPUT_BOOT_IMAGE}"
-  )
-fi

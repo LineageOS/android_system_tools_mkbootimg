@@ -142,10 +142,6 @@ class BootImageInfoFormatter:
         args.extend(['--kernel', os.path.join(self.image_dir, 'kernel')])
         args.extend(['--ramdisk', os.path.join(self.image_dir, 'ramdisk')])
 
-        if self.header_version >= 4 and self.boot_signature_size > 0:
-            args.extend(['--boot_signature',
-                         os.path.join(self.image_dir, 'boot_signature')])
-
         if self.header_version <= 2:
             if self.second_size > 0:
                 args.extend(['--second',
