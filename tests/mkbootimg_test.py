@@ -760,6 +760,80 @@ class MkbootimgTest(unittest.TestCase):
             self.assertEqual(raw_vendor_cmdline,
                              vendor_cmdline.encode() + b'\x00')
 
+    def test_vendor_boot_v4_without_dtb(self):
+        """Tests building vendor_boot version 4 without dtb image."""
+        with tempfile.TemporaryDirectory() as temp_out_dir:
+            vendor_boot_img = os.path.join(temp_out_dir, 'vendor_boot.img')
+            ramdisk = generate_test_file(
+                os.path.join(temp_out_dir, 'ramdisk'), 0x1000)
+            mkbootimg_cmds = [
+                'mkbootimg',
+                '--header_version', '4',
+                '--vendor_boot', vendor_boot_img,
+                '--vendor_ramdisk', ramdisk,
+            ]
+            unpack_bootimg_cmds = [
+                'unpack_bootimg',
+                '--boot_img', vendor_boot_img,
+                '--out', os.path.join(temp_out_dir, 'out'),
+            ]
+            expected_output = [
+                'boot magic: VNDRBOOT',
+                'vendor boot image header version: 4',
+                'dtb size: 0',
+            ]
+
+            subprocess.run(mkbootimg_cmds, check=True)
+            result = subprocess.run(unpack_bootimg_cmds, check=True,
+                                    capture_output=True, encoding='utf-8')
+            output = [line.strip() for line in result.stdout.splitlines()]
+            if not subsequence_of(expected_output, output):
+                msg = '\n'.join([
+                    'Unexpected unpack_bootimg output:',
+                    'Expected:',
+                    ' ' + '\n '.join(expected_output),
+                    '',
+                    'Actual:',
+                    ' ' + '\n '.join(output),
+                ])
+                self.fail(msg)
+
+    def test_unpack_vendor_boot_image_v4_without_dtb(self):
+        """Tests that mkbootimg(unpack_bootimg(image)) is an identity when no dtb image."""
+        with tempfile.TemporaryDirectory() as temp_out_dir:
+            vendor_boot_img = os.path.join(temp_out_dir, 'vendor_boot.img')
+            vendor_boot_img_reconstructed = os.path.join(
+                temp_out_dir, 'vendor_boot.img.reconstructed')
+            ramdisk = generate_test_file(
+                os.path.join(temp_out_dir, 'ramdisk'), 0x121212)
+
+            mkbootimg_cmds = [
+                'mkbootimg',
+                '--header_version', '4',
+                '--vendor_boot', vendor_boot_img,
+                '--vendor_ramdisk', ramdisk,
+            ]
+            unpack_bootimg_cmds = [
+                'unpack_bootimg',
+                '--boot_img', vendor_boot_img,
+                '--out', os.path.join(temp_out_dir, 'out'),
+                '--format=mkbootimg',
+            ]
+            subprocess.run(mkbootimg_cmds, check=True)
+            result = subprocess.run(unpack_bootimg_cmds, check=True,
+                                    capture_output=True, encoding='utf-8')
+            mkbootimg_cmds = [
+                'mkbootimg',
+                '--vendor_boot', vendor_boot_img_reconstructed,
+            ]
+            unpack_format_args = shlex.split(result.stdout)
+            mkbootimg_cmds.extend(unpack_format_args)
+
+            subprocess.run(mkbootimg_cmds, check=True)
+            self.assertTrue(
+                filecmp.cmp(vendor_boot_img, vendor_boot_img_reconstructed),
+                'reconstructed vendor_boot image differ from the original')
+
 
 # I don't know how, but we need both the logger configuration and verbosity
 # level > 2 to make atest work. And yes this line needs to be at the very top
