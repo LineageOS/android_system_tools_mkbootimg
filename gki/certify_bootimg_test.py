@@ -17,6 +17,7 @@
 """Tests certify_bootimg."""
 
 import logging
+import glob
 import os
 import random
 import shutil
@@ -42,11 +43,11 @@ def generate_test_file(pathname, size, seed=None):
     return pathname
 
 
-def generate_test_boot_image(boot_img, avb_partition_size=None):
+def generate_test_boot_image(boot_img, kernel_size=4096, seed='kernel',
+                             avb_partition_size=None):
     """Generates a test boot.img without a ramdisk."""
     with tempfile.NamedTemporaryFile() as kernel_tmpfile:
-        generate_test_file(pathname=kernel_tmpfile.name, size=0x1000,
-                           seed='kernel')
+        generate_test_file(kernel_tmpfile.name, kernel_size, seed)
         kernel_tmpfile.flush()
 
         mkbootimg_cmds = [
@@ -65,6 +66,28 @@ def generate_test_boot_image(boot_img, avb_partition_size=None):
                        '--partition_name', 'boot',
                        '--partition_size', str(avb_partition_size)]
         subprocess.check_call(avbtool_cmd)
+
+
+def generate_test_boot_image_archive(output_zip, boot_img_info):
+    """Generates a zip archive of test boot images.
+
+    Args:
+        output_zip: the output zip archive, e.g., /path/to/boot-img.zip.
+        boot_img_info: a list of (boot_image_name, kernel_size,
+          partition_size) tuples. e.g.,
+          [('boot-1.0.img', 4096, 4 * 1024),
+           ('boot-2.0.img', 8192, 8 * 1024)].
+    """
+    with tempfile.TemporaryDirectory() as temp_out_dir:
+        for name, kernel_size, partition_size in boot_img_info:
+            boot_img = os.path.join(temp_out_dir, name)
+            generate_test_boot_image(boot_img=boot_img,
+                                     kernel_size=kernel_size,
+                                     seed=name,
+                                     avb_partition_size=partition_size)
+
+        archive_base_name = os.path.splitext(output_zip)[0]
+        shutil.make_archive(archive_base_name, 'zip', temp_out_dir)
 
 
 def has_avb_footer(image):
@@ -105,7 +128,12 @@ def get_vbmeta_size(vbmeta_bytes):
 
 
 def extract_boot_signatures(boot_img, output_dir):
-    """Extracts the boot signatures of a boot image."""
+    """Extracts the boot signatures of a boot image.
+
+    This functions extracts the boot signatures of |boot_img| as:
+      - |output_dir|/boot_signature1
+      - |output_dir|/boot_signature2
+    """
 
     boot_img_copy = os.path.join(output_dir, 'boot_image_copy')
     shutil.copy2(boot_img, boot_img_copy)
@@ -135,6 +163,27 @@ def extract_boot_signatures(boot_img, output_dir):
 
         # Moves to the next signature.
         boot_signature_bytes = boot_signature_bytes[next_signature_size:]
+
+
+def extract_boot_archive_with_signatures(boot_img_zip, output_dir):
+    """Extracts boot images and signatures of a boot images archive.
+
+    Suppose there are two boot images in |boot_img_zip|: boot-1.0.img
+    and boot-2.0.img. This function then extracts each boot-*.img and
+    their signatures as:
+      - |output_dir|/boot-1.0.img
+      - |output_dir|/boot-2.0.img
+      - |output_dir|/boot-1.0/boot_signature1
+      - |output_dir|/boot-1.0/boot_signature2
+      - |output_dir|/boot-2.0/boot_signature1
+      - |output_dir|/boot-2.0/boot_signature2
+    """
+    shutil.unpack_archive(boot_img_zip, output_dir)
+    for boot_img in glob.glob(os.path.join(output_dir, 'boot-*.img')):
+        img_name = os.path.splitext(os.path.basename(boot_img))[0]
+        signature_output_dir = os.path.join(output_dir, img_name)
+        os.mkdir(signature_output_dir, 0o777)
+        extract_boot_signatures(boot_img, signature_output_dir)
 
 
 class CertifyBootimgTest(unittest.TestCase):
@@ -251,6 +300,110 @@ class CertifyBootimgTest(unittest.TestCase):
             '      Digest:                '
             '762c877f3af0d50a4a4fbc1385d5c7ce'
             '52a1288db74b33b72217d93db6f2909f\n'
+            '      Flags:                 0\n'
+            "    Prop: foo -> 'bar'\n"
+            "    Prop: gki -> 'nice'\n"
+        )
+
+        self._EXPECTED_BOOT_1_0_SIGNATURE1_RSA4096 = (   # pylint: disable=C0103
+            'Minimum libavb version:   1.0\n'
+            'Header Block:             256 bytes\n'
+            'Authentication Block:     576 bytes\n'
+            'Auxiliary Block:          1344 bytes\n'
+            'Public key (sha1):        '
+            '2597c218aae470a130f61162feaae70afd97f011\n'
+            'Algorithm:                SHA256_RSA4096\n'    # RSA4096
+            'Rollback Index:           0\n'
+            'Flags:                    0\n'
+            'Rollback Index Location:  0\n'
+            "Release String:           'avbtool 1.2.0'\n"
+            'Descriptors:\n'
+            '    Hash descriptor:\n'
+            '      Image Size:            12288 bytes\n'
+            '      Hash Algorithm:        sha256\n'
+            '      Partition Name:        boot\n'           # boot
+            '      Salt:                  d00df00d\n'
+            '      Digest:                '
+            '88465e463bffb9f7dfc0c1f46d01bcf3'
+            '15f7693e19bd188a0ca1feca2ed7b9df\n'
+            '      Flags:                 0\n'
+            "    Prop: foo -> 'bar'\n"
+            "    Prop: gki -> 'nice'\n"
+        )
+
+        self._EXPECTED_BOOT_1_0_SIGNATURE2_RSA4096 = (   # pylint: disable=C0103
+            'Minimum libavb version:   1.0\n'
+            'Header Block:             256 bytes\n'
+            'Authentication Block:     576 bytes\n'
+            'Auxiliary Block:          1344 bytes\n'
+            'Public key (sha1):        '
+            '2597c218aae470a130f61162feaae70afd97f011\n'
+            'Algorithm:                SHA256_RSA4096\n'    # RSA4096
+            'Rollback Index:           0\n'
+            'Flags:                    0\n'
+            'Rollback Index Location:  0\n'
+            "Release String:           'avbtool 1.2.0'\n"
+            'Descriptors:\n'
+            '    Hash descriptor:\n'
+            '      Image Size:            8192 bytes\n'
+            '      Hash Algorithm:        sha256\n'
+            '      Partition Name:        generic_kernel\n' # generic_kernel
+            '      Salt:                  d00df00d\n'
+            '      Digest:                '
+            '14ac8d0d233e57a317acd05cd458f2bb'
+            'cc78725ef9f66c1b38e90697fb09d943\n'
+            '      Flags:                 0\n'
+            "    Prop: foo -> 'bar'\n"
+            "    Prop: gki -> 'nice'\n"
+        )
+
+        self._EXPECTED_BOOT_2_0_SIGNATURE1_RSA4096 = (   # pylint: disable=C0103
+            'Minimum libavb version:   1.0\n'
+            'Header Block:             256 bytes\n'
+            'Authentication Block:     576 bytes\n'
+            'Auxiliary Block:          1344 bytes\n'
+            'Public key (sha1):        '
+            '2597c218aae470a130f61162feaae70afd97f011\n'
+            'Algorithm:                SHA256_RSA4096\n'    # RSA4096
+            'Rollback Index:           0\n'
+            'Flags:                    0\n'
+            'Rollback Index Location:  0\n'
+            "Release String:           'avbtool 1.2.0'\n"
+            'Descriptors:\n'
+            '    Hash descriptor:\n'
+            '      Image Size:            20480 bytes\n'
+            '      Hash Algorithm:        sha256\n'
+            '      Partition Name:        boot\n'           # boot
+            '      Salt:                  d00df00d\n'
+            '      Digest:                '
+            '3e6a9854a9d2350a7071083bc3f37376'
+            '37573fd87b1c72b146cb4870ac6af36f\n'
+            '      Flags:                 0\n'
+            "    Prop: foo -> 'bar'\n"
+            "    Prop: gki -> 'nice'\n"
+        )
+
+        self._EXPECTED_BOOT_2_0_SIGNATURE2_RSA4096 = (   # pylint: disable=C0103
+            'Minimum libavb version:   1.0\n'
+            'Header Block:             256 bytes\n'
+            'Authentication Block:     576 bytes\n'
+            'Auxiliary Block:          1344 bytes\n'
+            'Public key (sha1):        '
+            '2597c218aae470a130f61162feaae70afd97f011\n'
+            'Algorithm:                SHA256_RSA4096\n'    # RSA4096
+            'Rollback Index:           0\n'
+            'Flags:                    0\n'
+            'Rollback Index Location:  0\n'
+            "Release String:           'avbtool 1.2.0'\n"
+            'Descriptors:\n'
+            '    Hash descriptor:\n'
+            '      Image Size:            16384 bytes\n'
+            '      Hash Algorithm:        sha256\n'
+            '      Partition Name:        generic_kernel\n' # generic_kernel
+            '      Salt:                  d00df00d\n'
+            '      Digest:                '
+            '92fb8443cd284b67a4cbf5ce00348b50'
+            '1c657e0aedf4e2181c92ad7fc8b5224f\n'
             '      Flags:                 0\n'
             "    Prop: foo -> 'bar'\n"
             "    Prop: gki -> 'nice'\n"
@@ -406,6 +559,52 @@ class CertifyBootimgTest(unittest.TestCase):
             except subprocess.CalledProcessError as err:
                 self.assertIn('ValueError: boot_signature size must be <= ',
                               err.stderr)
+
+    def test_certify_bootimg_archive(self):
+        """Tests certify_bootimg for a boot-img.zip."""
+        with tempfile.TemporaryDirectory() as temp_out_dir:
+            boot_img_zip = os.path.join(temp_out_dir, 'boot-img.zip')
+            generate_test_boot_image_archive(
+                boot_img_zip,
+                # A list of (boot_img_name, kernel_size, partition_size).
+                [('boot-1.0.img', 8 * 1024, 128 * 1024),
+                 ('boot-2.0.img', 16 * 1024, 256 * 1024)])
+
+            # Certify the boot image archive, with a RSA4096 key.
+            boot_certified_img_zip = os.path.join(temp_out_dir,
+                                                  'boot-certified-img.zip')
+            certify_bootimg_cmds = [
+                'certify_bootimg',
+                '--boot_img_zip', boot_img_zip,
+                '--algorithm', 'SHA256_RSA4096',
+                '--key', './testdata/testkey_rsa4096.pem',
+                '--extra_args', '--prop foo:bar --prop gki:nice',
+                '--output', boot_certified_img_zip,
+            ]
+            subprocess.run(certify_bootimg_cmds, check=True, cwd=self._exec_dir)
+
+            extract_boot_archive_with_signatures(boot_certified_img_zip,
+                                                 temp_out_dir)
+
+            # Checks an AVB footer exists and the image size remains.
+            boot_1_img = os.path.join(temp_out_dir, 'boot-1.0.img')
+            self.assertTrue(has_avb_footer(boot_1_img))
+            self.assertEqual(os.path.getsize(boot_1_img), 128 * 1024)
+
+            boot_2_img = os.path.join(temp_out_dir, 'boot-2.0.img')
+            self.assertTrue(has_avb_footer(boot_2_img))
+            self.assertEqual(os.path.getsize(boot_2_img), 256 * 1024)
+
+            self._test_boot_signatures(
+                temp_out_dir,
+                {'boot-1.0/boot_signature1':
+                    self._EXPECTED_BOOT_1_0_SIGNATURE1_RSA4096,
+                 'boot-1.0/boot_signature2':
+                    self._EXPECTED_BOOT_1_0_SIGNATURE2_RSA4096,
+                 'boot-2.0/boot_signature1':
+                    self._EXPECTED_BOOT_2_0_SIGNATURE1_RSA4096,
+                 'boot-2.0/boot_signature2':
+                    self._EXPECTED_BOOT_2_0_SIGNATURE2_RSA4096})
 
 
 # I don't know how, but we need both the logger configuration and verbosity
