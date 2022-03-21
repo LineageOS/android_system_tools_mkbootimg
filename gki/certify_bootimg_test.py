@@ -71,6 +71,9 @@ def generate_test_boot_image(boot_img, kernel_size=4096, seed='kernel',
 def generate_test_boot_image_archive(output_zip, boot_img_info):
     """Generates a zip archive of test boot images.
 
+    It also adds a file gki-info.txt, which contains additional settings for
+    for `certify_bootimg --extra_args`.
+
     Args:
         output_zip: the output zip archive, e.g., /path/to/boot-img.zip.
         boot_img_info: a list of (boot_image_name, kernel_size,
@@ -85,6 +88,14 @@ def generate_test_boot_image_archive(output_zip, boot_img_info):
                                      kernel_size=kernel_size,
                                      seed=name,
                                      avb_partition_size=partition_size)
+
+        gki_info = os.path.join(temp_out_dir, 'gki-info.txt')
+        with open(gki_info, 'w', encoding='utf-8') as f:
+            f.write('certify_bootimg_extra_args='
+                    '--prop KERNEL_RELEASE:5.10.42'
+                    '-android13-0-00544-ged21d463f856 '
+                    '--prop BRANCH:android13-5.10-2022-05 '
+                    '--prop BUILD_NUMBER:ab8295296\n')
 
         archive_base_name = os.path.splitext(output_zip)[0]
         shutil.make_archive(archive_base_name, 'zip', temp_out_dir)
@@ -309,7 +320,7 @@ class CertifyBootimgTest(unittest.TestCase):
             'Minimum libavb version:   1.0\n'
             'Header Block:             256 bytes\n'
             'Authentication Block:     576 bytes\n'
-            'Auxiliary Block:          1344 bytes\n'
+            'Auxiliary Block:          1536 bytes\n'
             'Public key (sha1):        '
             '2597c218aae470a130f61162feaae70afd97f011\n'
             'Algorithm:                SHA256_RSA4096\n'    # RSA4096
@@ -329,13 +340,17 @@ class CertifyBootimgTest(unittest.TestCase):
             '      Flags:                 0\n'
             "    Prop: foo -> 'bar'\n"
             "    Prop: gki -> 'nice'\n"
+            "    Prop: KERNEL_RELEASE -> '5.10.42-android13-0-00544-"
+            "ged21d463f856'\n"
+            "    Prop: BRANCH -> 'android13-5.10-2022-05'\n"
+            "    Prop: BUILD_NUMBER -> 'ab8295296'\n"
         )
 
         self._EXPECTED_BOOT_1_0_SIGNATURE2_RSA4096 = (   # pylint: disable=C0103
             'Minimum libavb version:   1.0\n'
             'Header Block:             256 bytes\n'
             'Authentication Block:     576 bytes\n'
-            'Auxiliary Block:          1344 bytes\n'
+            'Auxiliary Block:          1536 bytes\n'
             'Public key (sha1):        '
             '2597c218aae470a130f61162feaae70afd97f011\n'
             'Algorithm:                SHA256_RSA4096\n'    # RSA4096
@@ -355,13 +370,17 @@ class CertifyBootimgTest(unittest.TestCase):
             '      Flags:                 0\n'
             "    Prop: foo -> 'bar'\n"
             "    Prop: gki -> 'nice'\n"
+            "    Prop: KERNEL_RELEASE -> '5.10.42-android13-0-00544-"
+            "ged21d463f856'\n"
+            "    Prop: BRANCH -> 'android13-5.10-2022-05'\n"
+            "    Prop: BUILD_NUMBER -> 'ab8295296'\n"
         )
 
         self._EXPECTED_BOOT_2_0_SIGNATURE1_RSA4096 = (   # pylint: disable=C0103
             'Minimum libavb version:   1.0\n'
             'Header Block:             256 bytes\n'
             'Authentication Block:     576 bytes\n'
-            'Auxiliary Block:          1344 bytes\n'
+            'Auxiliary Block:          1536 bytes\n'
             'Public key (sha1):        '
             '2597c218aae470a130f61162feaae70afd97f011\n'
             'Algorithm:                SHA256_RSA4096\n'    # RSA4096
@@ -381,13 +400,17 @@ class CertifyBootimgTest(unittest.TestCase):
             '      Flags:                 0\n'
             "    Prop: foo -> 'bar'\n"
             "    Prop: gki -> 'nice'\n"
+            "    Prop: KERNEL_RELEASE -> '5.10.42-android13-0-00544-"
+            "ged21d463f856'\n"
+            "    Prop: BRANCH -> 'android13-5.10-2022-05'\n"
+            "    Prop: BUILD_NUMBER -> 'ab8295296'\n"
         )
 
         self._EXPECTED_BOOT_2_0_SIGNATURE2_RSA4096 = (   # pylint: disable=C0103
             'Minimum libavb version:   1.0\n'
             'Header Block:             256 bytes\n'
             'Authentication Block:     576 bytes\n'
-            'Auxiliary Block:          1344 bytes\n'
+            'Auxiliary Block:          1536 bytes\n'
             'Public key (sha1):        '
             '2597c218aae470a130f61162feaae70afd97f011\n'
             'Algorithm:                SHA256_RSA4096\n'    # RSA4096
@@ -407,6 +430,10 @@ class CertifyBootimgTest(unittest.TestCase):
             '      Flags:                 0\n'
             "    Prop: foo -> 'bar'\n"
             "    Prop: gki -> 'nice'\n"
+            "    Prop: KERNEL_RELEASE -> '5.10.42-android13-0-00544-"
+            "ged21d463f856'\n"
+            "    Prop: BRANCH -> 'android13-5.10-2022-05'\n"
+            "    Prop: BUILD_NUMBER -> 'ab8295296'\n"
         )
 
     def _test_boot_signatures(self, signatures_dir, expected_signatures_info):
