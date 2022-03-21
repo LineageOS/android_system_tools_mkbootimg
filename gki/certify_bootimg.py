@@ -151,6 +151,20 @@ def add_avb_footer(image, partition_size):
     subprocess.check_call(avbtool_cmd)
 
 
+def load_dict_from_file(path):
+    """Loads key=value pairs from |path| and returns a dict."""
+    d = {}
+    with open(path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            if '=' in line:
+                name, value = line.split('=', 1)
+                d[name] = value
+    return d
+
+
 def parse_cmdline():
     """Parse command-line options."""
     parser = ArgumentParser(add_help=True)
@@ -203,10 +217,15 @@ def certify_bootimg_zip(boot_img_zip, output_zip, algorithm, key, extra_args):
     """Similar to certify_bootimg(), but for a zip archive of boot images."""
     with tempfile.TemporaryDirectory() as unzip_dir:
         shutil.unpack_archive(boot_img_zip, unzip_dir)
+
+        info_dict = load_dict_from_file(os.path.join(unzip_dir, 'gki-info.txt'))
+        extra_args.extend(info_dict['certify_bootimg_extra_args'].split())
+
         for boot_img in glob.glob(os.path.join(unzip_dir, 'boot-*.img')):
             print(f'Certifying {os.path.basename(boot_img)} ...')
             certify_bootimg(boot_img=boot_img, output_img=boot_img,
                             algorithm=algorithm, key=key, extra_args=extra_args)
+
         print(f'Making certified archive: {output_zip}')
         archive_base_name = os.path.splitext(output_zip)[0]
         shutil.make_archive(archive_base_name, 'zip', unzip_dir)
