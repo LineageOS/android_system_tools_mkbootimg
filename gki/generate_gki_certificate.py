@@ -18,6 +18,7 @@
 """Generate a Generic Boot Image certificate suitable for VTS verification."""
 
 from argparse import ArgumentParser
+import shlex
 import subprocess
 
 
@@ -73,7 +74,7 @@ def parse_cmdline():
 
     additional_avb_args = []
     for a in args.additional_avb_args:
-        additional_avb_args.extend(a.split())
+        additional_avb_args.extend(shlex.split(a))
     args.additional_avb_args = additional_avb_args
 
     return args
