@@ -95,7 +95,8 @@ def generate_test_boot_image_archive(output_zip, boot_img_info):
                     '--prop KERNEL_RELEASE:5.10.42'
                     '-android13-0-00544-ged21d463f856 '
                     '--prop BRANCH:android13-5.10-2022-05 '
-                    '--prop BUILD_NUMBER:ab8295296\n')
+                    '--prop BUILD_NUMBER:ab8295296 '
+                    '--prop SPACE:"nice to meet you"\n')
 
         archive_base_name = os.path.splitext(output_zip)[0]
         shutil.make_archive(archive_base_name, 'zip', temp_out_dir)
@@ -234,8 +235,8 @@ class CertifyBootimgTest(unittest.TestCase):
             'faf1da72a4fba97ddab0b8f7a410db86'
             '8fb72392a66d1440ff8bff490c73c771\n'
             '      Flags:                 0\n'
-            "    Prop: foo -> 'bar'\n"
             "    Prop: gki -> 'nice'\n"
+            "    Prop: space -> 'nice to meet you'\n"
         )
 
         self._EXPECTED_KERNEL_SIGNATURE_RSA2048 = (     # pylint: disable=C0103
@@ -260,8 +261,8 @@ class CertifyBootimgTest(unittest.TestCase):
             '762c877f3af0d50a4a4fbc1385d5c7ce'
             '52a1288db74b33b72217d93db6f2909f\n'
             '      Flags:                 0\n'
-            "    Prop: foo -> 'bar'\n"
             "    Prop: gki -> 'nice'\n"
+            "    Prop: space -> 'nice to meet you'\n"
         )
 
         self._EXPECTED_BOOT_SIGNATURE_RSA4096 = (       # pylint: disable=C0103
@@ -286,8 +287,8 @@ class CertifyBootimgTest(unittest.TestCase):
             'faf1da72a4fba97ddab0b8f7a410db86'
             '8fb72392a66d1440ff8bff490c73c771\n'
             '      Flags:                 0\n'
-            "    Prop: foo -> 'bar'\n"
             "    Prop: gki -> 'nice'\n"
+            "    Prop: space -> 'nice to meet you'\n"
         )
 
         self._EXPECTED_KERNEL_SIGNATURE_RSA4096 = (     # pylint: disable=C0103
@@ -312,15 +313,15 @@ class CertifyBootimgTest(unittest.TestCase):
             '762c877f3af0d50a4a4fbc1385d5c7ce'
             '52a1288db74b33b72217d93db6f2909f\n'
             '      Flags:                 0\n'
-            "    Prop: foo -> 'bar'\n"
             "    Prop: gki -> 'nice'\n"
+            "    Prop: space -> 'nice to meet you'\n"
         )
 
         self._EXPECTED_BOOT_1_0_SIGNATURE1_RSA4096 = (   # pylint: disable=C0103
             'Minimum libavb version:   1.0\n'
             'Header Block:             256 bytes\n'
             'Authentication Block:     576 bytes\n'
-            'Auxiliary Block:          1536 bytes\n'
+            'Auxiliary Block:          1600 bytes\n'
             'Public key (sha1):        '
             '2597c218aae470a130f61162feaae70afd97f011\n'
             'Algorithm:                SHA256_RSA4096\n'    # RSA4096
@@ -338,19 +339,20 @@ class CertifyBootimgTest(unittest.TestCase):
             '88465e463bffb9f7dfc0c1f46d01bcf3'
             '15f7693e19bd188a0ca1feca2ed7b9df\n'
             '      Flags:                 0\n'
-            "    Prop: foo -> 'bar'\n"
             "    Prop: gki -> 'nice'\n"
+            "    Prop: space -> 'nice to meet you'\n"
             "    Prop: KERNEL_RELEASE -> '5.10.42-android13-0-00544-"
             "ged21d463f856'\n"
             "    Prop: BRANCH -> 'android13-5.10-2022-05'\n"
             "    Prop: BUILD_NUMBER -> 'ab8295296'\n"
+            "    Prop: SPACE -> 'nice to meet you'\n"
         )
 
         self._EXPECTED_BOOT_1_0_SIGNATURE2_RSA4096 = (   # pylint: disable=C0103
             'Minimum libavb version:   1.0\n'
             'Header Block:             256 bytes\n'
             'Authentication Block:     576 bytes\n'
-            'Auxiliary Block:          1536 bytes\n'
+            'Auxiliary Block:          1600 bytes\n'
             'Public key (sha1):        '
             '2597c218aae470a130f61162feaae70afd97f011\n'
             'Algorithm:                SHA256_RSA4096\n'    # RSA4096
@@ -368,19 +370,20 @@ class CertifyBootimgTest(unittest.TestCase):
             '14ac8d0d233e57a317acd05cd458f2bb'
             'cc78725ef9f66c1b38e90697fb09d943\n'
             '      Flags:                 0\n'
-            "    Prop: foo -> 'bar'\n"
             "    Prop: gki -> 'nice'\n"
+            "    Prop: space -> 'nice to meet you'\n"
             "    Prop: KERNEL_RELEASE -> '5.10.42-android13-0-00544-"
             "ged21d463f856'\n"
             "    Prop: BRANCH -> 'android13-5.10-2022-05'\n"
             "    Prop: BUILD_NUMBER -> 'ab8295296'\n"
+            "    Prop: SPACE -> 'nice to meet you'\n"
         )
 
         self._EXPECTED_BOOT_2_0_SIGNATURE1_RSA4096 = (   # pylint: disable=C0103
             'Minimum libavb version:   1.0\n'
             'Header Block:             256 bytes\n'
             'Authentication Block:     576 bytes\n'
-            'Auxiliary Block:          1536 bytes\n'
+            'Auxiliary Block:          1600 bytes\n'
             'Public key (sha1):        '
             '2597c218aae470a130f61162feaae70afd97f011\n'
             'Algorithm:                SHA256_RSA4096\n'    # RSA4096
@@ -398,19 +401,20 @@ class CertifyBootimgTest(unittest.TestCase):
             '3e6a9854a9d2350a7071083bc3f37376'
             '37573fd87b1c72b146cb4870ac6af36f\n'
             '      Flags:                 0\n'
-            "    Prop: foo -> 'bar'\n"
             "    Prop: gki -> 'nice'\n"
+            "    Prop: space -> 'nice to meet you'\n"
             "    Prop: KERNEL_RELEASE -> '5.10.42-android13-0-00544-"
             "ged21d463f856'\n"
             "    Prop: BRANCH -> 'android13-5.10-2022-05'\n"
             "    Prop: BUILD_NUMBER -> 'ab8295296'\n"
+            "    Prop: SPACE -> 'nice to meet you'\n"
         )
 
         self._EXPECTED_BOOT_2_0_SIGNATURE2_RSA4096 = (   # pylint: disable=C0103
             'Minimum libavb version:   1.0\n'
             'Header Block:             256 bytes\n'
             'Authentication Block:     576 bytes\n'
-            'Auxiliary Block:          1536 bytes\n'
+            'Auxiliary Block:          1600 bytes\n'
             'Public key (sha1):        '
             '2597c218aae470a130f61162feaae70afd97f011\n'
             'Algorithm:                SHA256_RSA4096\n'    # RSA4096
@@ -428,12 +432,13 @@ class CertifyBootimgTest(unittest.TestCase):
             '92fb8443cd284b67a4cbf5ce00348b50'
             '1c657e0aedf4e2181c92ad7fc8b5224f\n'
             '      Flags:                 0\n'
-            "    Prop: foo -> 'bar'\n"
             "    Prop: gki -> 'nice'\n"
+            "    Prop: space -> 'nice to meet you'\n"
             "    Prop: KERNEL_RELEASE -> '5.10.42-android13-0-00544-"
             "ged21d463f856'\n"
             "    Prop: BRANCH -> 'android13-5.10-2022-05'\n"
             "    Prop: BUILD_NUMBER -> 'ab8295296'\n"
+            "    Prop: SPACE -> 'nice to meet you'\n"
         )
 
     def _test_boot_signatures(self, signatures_dir, expected_signatures_info):
@@ -472,7 +477,8 @@ class CertifyBootimgTest(unittest.TestCase):
                 '--boot_img', boot_img,
                 '--algorithm', 'SHA256_RSA2048',
                 '--key', './testdata/testkey_rsa2048.pem',
-                '--extra_args', '--prop foo:bar --prop gki:nice',
+                '--extra_args', '--prop gki:nice '
+                '--prop space:"nice to meet you"',
                 '--output', boot_certified_img,
             ]
             subprocess.run(certify_bootimg_cmds, check=True, cwd=self._exec_dir)
@@ -491,7 +497,8 @@ class CertifyBootimgTest(unittest.TestCase):
                 '--boot_img', boot_certified_img,
                 '--algorithm', 'SHA256_RSA4096',
                 '--key', './testdata/testkey_rsa4096.pem',
-                '--extra_args', '--prop foo:bar --prop gki:nice',
+                '--extra_args', '--prop gki:nice '
+                '--prop space:"nice to meet you"',
                 '--output', boot_certified2_img,
             ]
             subprocess.run(certify_bootimg_cmds, check=True, cwd=self._exec_dir)
@@ -518,7 +525,8 @@ class CertifyBootimgTest(unittest.TestCase):
                 '--boot_img', boot_img,
                 '--algorithm', 'SHA256_RSA2048',
                 '--key', './testdata/testkey_rsa2048.pem',
-                '--extra_args', '--prop foo:bar --prop gki:nice',
+                '--extra_args', '--prop gki:nice '
+                '--prop space:"nice to meet you"',
                 '--output', boot_certified_img,
             ]
             subprocess.run(certify_bootimg_cmds, check=True, cwd=self._exec_dir)
@@ -542,7 +550,8 @@ class CertifyBootimgTest(unittest.TestCase):
                 '--boot_img', boot_certified_img,
                 '--algorithm', 'SHA256_RSA4096',
                 '--key', './testdata/testkey_rsa4096.pem',
-                '--extra_args', '--prop foo:bar --prop gki:nice',
+                '--extra_args', '--prop gki:nice '
+                '--prop space:"nice to meet you"',
                 '--output', boot_certified2_img,
             ]
             subprocess.run(certify_bootimg_cmds, check=True, cwd=self._exec_dir)
@@ -605,7 +614,8 @@ class CertifyBootimgTest(unittest.TestCase):
                 '--boot_img_zip', boot_img_zip,
                 '--algorithm', 'SHA256_RSA4096',
                 '--key', './testdata/testkey_rsa4096.pem',
-                '--extra_args', '--prop foo:bar --prop gki:nice',
+                '--extra_args', '--prop gki:nice '
+                '--prop space:"nice to meet you"',
                 '--output', boot_certified_img_zip,
             ]
             subprocess.run(certify_bootimg_cmds, check=True, cwd=self._exec_dir)
