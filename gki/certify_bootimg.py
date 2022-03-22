@@ -20,6 +20,7 @@
 from argparse import ArgumentParser
 import glob
 import os
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -191,7 +192,7 @@ def parse_cmdline():
 
     extra_args = []
     for a in args.extra_args:
-        extra_args.extend(a.split())
+        extra_args.extend(shlex.split(a))
     args.extra_args = extra_args
 
     return args
@@ -219,7 +220,7 @@ def certify_bootimg_zip(boot_img_zip, output_zip, algorithm, key, extra_args):
         shutil.unpack_archive(boot_img_zip, unzip_dir)
 
         info_dict = load_dict_from_file(os.path.join(unzip_dir, 'gki-info.txt'))
-        extra_args.extend(info_dict['certify_bootimg_extra_args'].split())
+        extra_args.extend(shlex.split(info_dict['certify_bootimg_extra_args']))
 
         for boot_img in glob.glob(os.path.join(unzip_dir, 'boot-*.img')):
             print(f'Certifying {os.path.basename(boot_img)} ...')
