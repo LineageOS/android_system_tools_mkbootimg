@@ -141,9 +141,6 @@ def write_header_v3_and_above(args):
 
 
 def write_vendor_boot_header(args):
-    if filesize(args.dtb) == 0:
-        raise ValueError('DTB image must not be empty.')
-
     if args.header_version > 3:
         vendor_ramdisk_size = args.vendor_ramdisk_total_size
         vendor_boot_header_size = VENDOR_BOOT_IMAGE_HEADER_V4_SIZE
