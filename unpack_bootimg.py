@@ -58,7 +58,7 @@ def format_os_version(os_version):
     a = os_version >> 14
     b = os_version >> 7 & ((1<<7) - 1)
     c = os_version & ((1<<7) - 1)
-    return '{}.{}.{}'.format(a, b, c)
+    return f'{a}.{b}.{c}'
 
 
 def format_os_patch_level(os_patch_level):
@@ -67,7 +67,7 @@ def format_os_patch_level(os_patch_level):
     y = os_patch_level >> 4
     y += 2000
     m = os_patch_level & ((1<<4) - 1)
-    return '{:04d}-{:02d}'.format(y, m)
+    return f'{y:04d}-{m:02d}'
 
 
 def decode_os_version_patch_level(os_version_patch_level):
@@ -354,7 +354,7 @@ class VendorBootImageInfoFormatter:
         args.extend(['--board', self.product_name])
 
         if self.dtb_size > 0:
-          args.extend(['--dtb', os.path.join(self.image_dir, 'dtb')])
+            args.extend(['--dtb', os.path.join(self.image_dir, 'dtb')])
 
         if self.header_version > 3:
             args.extend(['--vendor_bootconfig',
@@ -453,7 +453,7 @@ def unpack_vendor_boot_image(args):
     dtb_offset = page_size * (num_boot_header_pages + num_boot_ramdisk_pages
                              ) # header + vendor_ramdisk
     if info.dtb_size > 0:
-      image_info_list.append((dtb_offset, info.dtb_size, 'dtb'))
+        image_info_list.append((dtb_offset, info.dtb_size, 'dtb'))
 
     create_out_dir(args.out)
     for offset, size, name in image_info_list:
