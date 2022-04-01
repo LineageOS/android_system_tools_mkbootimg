@@ -91,6 +91,20 @@ python_binary_host {
     ],
 }
 
+python_binary_host {
+    name: "certify_bootimg",
+    defaults: ["mkbootimg_defaults"],
+    main: "gki/certify_bootimg.py",
+    srcs: [
+        "gki/certify_bootimg.py",
+        "gki/generate_gki_certificate.py",
+        "unpack_bootimg.py",
+    ],
+    required: [
+        "avbtool",
+    ],
+}
+
 python_test_host {
     name: "mkbootimg_test",
     defaults: ["mkbootimg_defaults"],
