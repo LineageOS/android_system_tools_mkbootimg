@@ -68,7 +68,7 @@ def generate_test_boot_image(boot_img, kernel_size=4096, seed='kernel',
         subprocess.check_call(avbtool_cmd)
 
 
-def generate_test_boot_image_archive(output_zip, boot_img_info):
+def generate_test_boot_image_archive(output_zip, boot_img_info, gki_info=None):
     """Generates a zip archive of test boot images.
 
     It also adds a file gki-info.txt, which contains additional settings for
@@ -80,6 +80,8 @@ def generate_test_boot_image_archive(output_zip, boot_img_info):
           partition_size) tuples. e.g.,
           [('boot-1.0.img', 4096, 4 * 1024),
            ('boot-2.0.img', 8192, 8 * 1024)].
+        gki_info: the file content to be written into 'gki-info.txt' in the
+          |output_zip|.
     """
     with tempfile.TemporaryDirectory() as temp_out_dir:
         for name, kernel_size, partition_size in boot_img_info:
@@ -89,14 +91,10 @@ def generate_test_boot_image_archive(output_zip, boot_img_info):
                                      seed=name,
                                      avb_partition_size=partition_size)
 
-        gki_info = os.path.join(temp_out_dir, 'gki-info.txt')
-        with open(gki_info, 'w', encoding='utf-8') as f:
-            f.write('certify_bootimg_extra_args='
-                    '--prop KERNEL_RELEASE:5.10.42'
-                    '-android13-0-00544-ged21d463f856 '
-                    '--prop BRANCH:android13-5.10-2022-05 '
-                    '--prop BUILD_NUMBER:ab8295296 '
-                    '--prop SPACE:"nice to meet you"\n')
+        if gki_info:
+            gki_info_path = os.path.join(temp_out_dir, 'gki-info.txt')
+            with open(gki_info_path, 'w', encoding='utf-8') as f:
+                f.write(gki_info)
 
         archive_base_name = os.path.splitext(output_zip)[0]
         shutil.make_archive(archive_base_name, 'zip', temp_out_dir)
@@ -441,6 +439,58 @@ class CertifyBootimgTest(unittest.TestCase):
             "    Prop: SPACE -> 'nice to meet you'\n"
         )
 
+        self._EXPECTED_BOOT_3_0_SIGNATURE1_RSA4096 = (   # pylint: disable=C0103
+            'Minimum libavb version:   1.0\n'
+            'Header Block:             256 bytes\n'
+            'Authentication Block:     576 bytes\n'
+            'Auxiliary Block:          1344 bytes\n'
+            'Public key (sha1):        '
+            '2597c218aae470a130f61162feaae70afd97f011\n'
+            'Algorithm:                SHA256_RSA4096\n'    # RSA4096
+            'Rollback Index:           0\n'
+            'Flags:                    0\n'
+            'Rollback Index Location:  0\n'
+            "Release String:           'avbtool 1.2.0'\n"
+            'Descriptors:\n'
+            '    Hash descriptor:\n'
+            '      Image Size:            12288 bytes\n'
+            '      Hash Algorithm:        sha256\n'
+            '      Partition Name:        boot\n'           # boot
+            '      Salt:                  d00df00d\n'
+            '      Digest:                '
+            '9b9cd845a367d7fc9b61d6ac02b0e7c9'
+            'dc3d3b219abf60dd6e19359f0353c917\n'
+            '      Flags:                 0\n'
+            "    Prop: gki -> 'nice'\n"
+            "    Prop: space -> 'nice to meet you'\n"
+        )
+
+        self._EXPECTED_BOOT_3_0_SIGNATURE2_RSA4096 = (   # pylint: disable=C0103
+            'Minimum libavb version:   1.0\n'
+            'Header Block:             256 bytes\n'
+            'Authentication Block:     576 bytes\n'
+            'Auxiliary Block:          1344 bytes\n'
+            'Public key (sha1):        '
+            '2597c218aae470a130f61162feaae70afd97f011\n'
+            'Algorithm:                SHA256_RSA4096\n'    # RSA4096
+            'Rollback Index:           0\n'
+            'Flags:                    0\n'
+            'Rollback Index Location:  0\n'
+            "Release String:           'avbtool 1.2.0'\n"
+            'Descriptors:\n'
+            '    Hash descriptor:\n'
+            '      Image Size:            8192 bytes\n'
+            '      Hash Algorithm:        sha256\n'
+            '      Partition Name:        generic_kernel\n' # generic_kernel
+            '      Salt:                  d00df00d\n'
+            '      Digest:                '
+            '0cd7d331ed9b32dcd92f00e2cac75595'
+            '52199170afe788a8fcf1954f9ea072d0\n'
+            '      Flags:                 0\n'
+            "    Prop: gki -> 'nice'\n"
+            "    Prop: space -> 'nice to meet you'\n"
+        )
+
     def _test_boot_signatures(self, signatures_dir, expected_signatures_info):
         """Tests the info of each boot signature under the signature directory.
 
@@ -600,11 +650,18 @@ class CertifyBootimgTest(unittest.TestCase):
         """Tests certify_bootimg for a boot-img.zip."""
         with tempfile.TemporaryDirectory() as temp_out_dir:
             boot_img_zip = os.path.join(temp_out_dir, 'boot-img.zip')
+            gki_info = ('certify_bootimg_extra_args='
+                        '--prop KERNEL_RELEASE:5.10.42'
+                        '-android13-0-00544-ged21d463f856 '
+                        '--prop BRANCH:android13-5.10-2022-05 '
+                        '--prop BUILD_NUMBER:ab8295296 '
+                        '--prop SPACE:"nice to meet you"\n')
             generate_test_boot_image_archive(
                 boot_img_zip,
                 # A list of (boot_img_name, kernel_size, partition_size).
                 [('boot-1.0.img', 8 * 1024, 128 * 1024),
-                 ('boot-2.0.img', 16 * 1024, 256 * 1024)])
+                 ('boot-2.0.img', 16 * 1024, 256 * 1024)],
+                gki_info)
 
             # Certify the boot image archive, with a RSA4096 key.
             boot_certified_img_zip = os.path.join(temp_out_dir,
@@ -642,6 +699,69 @@ class CertifyBootimgTest(unittest.TestCase):
                     self._EXPECTED_BOOT_2_0_SIGNATURE1_RSA4096,
                  'boot-2.0/boot_signature2':
                     self._EXPECTED_BOOT_2_0_SIGNATURE2_RSA4096})
+
+    def test_certify_bootimg_archive_without_gki_info(self):
+        """Tests certify_bootimg for a boot-img.zip."""
+        with tempfile.TemporaryDirectory() as temp_out_dir:
+            boot_img_zip = os.path.join(temp_out_dir, 'boot-img.zip')
+
+            # Checks ceritfy_bootimg works for a boot-img.zip without a
+            # gki-info.txt.
+            generate_test_boot_image_archive(
+                boot_img_zip,
+                # A list of (boot_img_name, kernel_size, partition_size).
+                [('boot-3.0.img', 8 * 1024, 128 * 1024)],
+                gki_info=None)
+            # Certify the boot image archive, with a RSA4096 key.
+            boot_certified_img_zip = os.path.join(temp_out_dir,
+                                                  'boot-certified-img.zip')
+            certify_bootimg_cmds = [
+                'certify_bootimg',
+                '--boot_img_zip', boot_img_zip,
+                '--algorithm', 'SHA256_RSA4096',
+                '--key', './testdata/testkey_rsa4096.pem',
+                '--extra_args', '--prop gki:nice '
+                '--prop space:"nice to meet you"',
+                '--output', boot_certified_img_zip,
+            ]
+            subprocess.run(certify_bootimg_cmds, check=True, cwd=self._exec_dir)
+
+            # Checks ceritfy_bootimg works for a boot-img.zip with a special
+            # gki-info.txt.
+            generate_test_boot_image_archive(
+                boot_img_zip,
+                # A list of (boot_img_name, kernel_size, partition_size).
+                [('boot-3.0.img', 8 * 1024, 128 * 1024)],
+                gki_info='a=b\n'
+                         'c=d\n')
+            # Certify the boot image archive, with a RSA4096 key.
+            boot_certified_img_zip = os.path.join(temp_out_dir,
+                                                  'boot-certified-img.zip')
+            certify_bootimg_cmds = [
+                'certify_bootimg',
+                '--boot_img_zip', boot_img_zip,
+                '--algorithm', 'SHA256_RSA4096',
+                '--key', './testdata/testkey_rsa4096.pem',
+                '--extra_args', '--prop gki:nice '
+                '--prop space:"nice to meet you"',
+                '--output', boot_certified_img_zip,
+            ]
+            subprocess.run(certify_bootimg_cmds, check=True, cwd=self._exec_dir)
+
+            extract_boot_archive_with_signatures(boot_certified_img_zip,
+                                                 temp_out_dir)
+
+            # Checks an AVB footer exists and the image size remains.
+            boot_3_img = os.path.join(temp_out_dir, 'boot-3.0.img')
+            self.assertTrue(has_avb_footer(boot_3_img))
+            self.assertEqual(os.path.getsize(boot_3_img), 128 * 1024)
+
+            self._test_boot_signatures(
+                temp_out_dir,
+                {'boot-3.0/boot_signature1':
+                    self._EXPECTED_BOOT_3_0_SIGNATURE1_RSA4096,
+                 'boot-3.0/boot_signature2':
+                    self._EXPECTED_BOOT_3_0_SIGNATURE2_RSA4096})
 
 
 # I don't know how, but we need both the logger configuration and verbosity
