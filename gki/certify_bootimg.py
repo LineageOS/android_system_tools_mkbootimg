@@ -213,8 +213,12 @@ def certify_bootimg_zip(boot_img_zip, output_zip, algorithm, key, extra_args):
     with tempfile.TemporaryDirectory() as unzip_dir:
         shutil.unpack_archive(boot_img_zip, unzip_dir)
 
-        info_dict = load_dict_from_file(os.path.join(unzip_dir, 'gki-info.txt'))
-        extra_args.extend(shlex.split(info_dict['certify_bootimg_extra_args']))
+        gki_info_file = os.path.join(unzip_dir, 'gki-info.txt')
+        if os.path.exists(gki_info_file):
+            info_dict = load_dict_from_file(gki_info_file)
+            if 'certify_bootimg_extra_args' in info_dict:
+                extra_args.extend(
+                    shlex.split(info_dict['certify_bootimg_extra_args']))
 
         for boot_img in glob.glob(os.path.join(unzip_dir, 'boot-*.img')):
             print(f'Certifying {os.path.basename(boot_img)} ...')
