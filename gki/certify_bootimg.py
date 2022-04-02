@@ -25,7 +25,8 @@ import shutil
 import subprocess
 import tempfile
 
-from generate_gki_certificate import generate_gki_certificate
+from gki.generate_gki_certificate import generate_gki_certificate
+from unpack_bootimg import unpack_bootimg
 
 BOOT_SIGNATURE_SIZE = 16 * 1024
 
@@ -33,14 +34,7 @@ BOOT_SIGNATURE_SIZE = 16 * 1024
 def get_kernel(boot_img):
     """Extracts the kernel from |boot_img| and returns it."""
     with tempfile.TemporaryDirectory() as unpack_dir:
-        unpack_bootimg_cmd = [
-            'unpack_bootimg',
-            '--boot_img', boot_img,
-            '--out', unpack_dir,
-        ]
-        subprocess.run(unpack_bootimg_cmd, check=True,
-                       stdout=subprocess.DEVNULL)
-
+        unpack_bootimg(boot_img, unpack_dir)
         with open(os.path.join(unpack_dir, 'kernel'), 'rb') as kernel:
             kernel_bytes = kernel.read()
             assert len(kernel_bytes) > 0
@@ -219,8 +213,12 @@ def certify_bootimg_zip(boot_img_zip, output_zip, algorithm, key, extra_args):
     with tempfile.TemporaryDirectory() as unzip_dir:
         shutil.unpack_archive(boot_img_zip, unzip_dir)
 
-        info_dict = load_dict_from_file(os.path.join(unzip_dir, 'gki-info.txt'))
-        extra_args.extend(shlex.split(info_dict['certify_bootimg_extra_args']))
+        gki_info_file = os.path.join(unzip_dir, 'gki-info.txt')
+        if os.path.exists(gki_info_file):
+            info_dict = load_dict_from_file(gki_info_file)
+            if 'certify_bootimg_extra_args' in info_dict:
+                extra_args.extend(
+                    shlex.split(info_dict['certify_bootimg_extra_args']))
 
         for boot_img in glob.glob(os.path.join(unzip_dir, 'boot-*.img')):
             print(f'Certifying {os.path.basename(boot_img)} ...')
