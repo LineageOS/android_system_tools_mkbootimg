@@ -160,6 +160,20 @@ def load_dict_from_file(path):
     return d
 
 
+def get_archive_name_and_format_for_shutil(path):
+    """Returns archive name and format to shutil.make_archive() for the |path|.
+
+    e.g., returns ('/path/to/boot-img', 'gztar') if |path| is
+    '/path/to/boot-img.tar.gz'.
+    """
+    for format_name, format_extensions, _ in shutil.get_unpack_formats():
+        for extension in format_extensions:
+            if path.endswith(extension):
+                return path[:-len(extension)], format_name
+
+    raise ValueError(f"Unsupported archive format: '{path}'")
+
+
 def parse_cmdline():
     """Parse command-line options."""
     parser = ArgumentParser(add_help=True)
@@ -169,7 +183,7 @@ def parse_cmdline():
     input_group.add_argument(
         '--boot_img', help='path to the boot image to certify')
     input_group.add_argument(
-        '--boot_img_zip', help='path to the boot-img-*.zip archive to certify')
+        '--boot_img_archive', help='path to the boot images archive to certify')
 
     parser.add_argument('--algorithm', required=True,
                         help='signing algorithm for the certificate')
@@ -208,35 +222,45 @@ def certify_bootimg(boot_img, output_img, algorithm, key, extra_args):
         shutil.copy2(boot_tmp, output_img)
 
 
-def certify_bootimg_zip(boot_img_zip, output_zip, algorithm, key, extra_args):
-    """Similar to certify_bootimg(), but for a zip archive of boot images."""
-    with tempfile.TemporaryDirectory() as unzip_dir:
-        shutil.unpack_archive(boot_img_zip, unzip_dir)
+def certify_bootimg_archive(boot_img_archive, output_archive,
+                            algorithm, key, extra_args):
+    """Similar to certify_bootimg(), but for an archive of boot images."""
+    with tempfile.TemporaryDirectory() as unpack_dir:
+        shutil.unpack_archive(boot_img_archive, unpack_dir)
 
-        gki_info_file = os.path.join(unzip_dir, 'gki-info.txt')
+        gki_info_file = os.path.join(unpack_dir, 'gki-info.txt')
         if os.path.exists(gki_info_file):
             info_dict = load_dict_from_file(gki_info_file)
             if 'certify_bootimg_extra_args' in info_dict:
                 extra_args.extend(
                     shlex.split(info_dict['certify_bootimg_extra_args']))
 
-        for boot_img in glob.glob(os.path.join(unzip_dir, 'boot-*.img')):
+        for boot_img in glob.glob(os.path.join(unpack_dir, 'boot-*.img')):
             print(f'Certifying {os.path.basename(boot_img)} ...')
             certify_bootimg(boot_img=boot_img, output_img=boot_img,
                             algorithm=algorithm, key=key, extra_args=extra_args)
 
-        print(f'Making certified archive: {output_zip}')
-        archive_base_name = os.path.splitext(output_zip)[0]
-        shutil.make_archive(archive_base_name, 'zip', unzip_dir)
+        print(f'Making certified archive: {output_archive}')
+        archive_file_name, archive_format = (
+            get_archive_name_and_format_for_shutil(output_archive))
+        built_archive = shutil.make_archive(archive_file_name,
+                                            archive_format,
+                                            unpack_dir)
+        # shutil.make_archive() builds *.tar.gz when then |archive_format| is
+        # 'gztar'. However, the end user might specify |output_archive| with
+        # *.tgz. Renaming *.tar.gz to *.tgz for this case.
+        if built_archive != os.path.realpath(output_archive):
+            print(f'Renaming {built_archive} -> {output_archive} ...')
+            os.rename(built_archive, output_archive)
 
 
 def main():
     """Parse arguments and certify the boot image."""
     args = parse_cmdline()
 
-    if args.boot_img_zip:
-        certify_bootimg_zip(args.boot_img_zip, args.output, args.algorithm,
-                            args.key, args.extra_args)
+    if args.boot_img_archive:
+        certify_bootimg_archive(args.boot_img_archive, args.output,
+                                args.algorithm, args.key, args.extra_args)
     else:
         certify_bootimg(args.boot_img, args.output, args.algorithm,
                         args.key, args.extra_args)
