@@ -160,6 +160,14 @@ def load_dict_from_file(path):
     return d
 
 
+def load_gki_info_file(gki_info_file, extra_args):
+    """Loads extra args from |gki_info_file| into |extra_args|."""
+    info_dict = load_dict_from_file(gki_info_file)
+    if 'certify_bootimg_extra_args' in info_dict:
+        extra_args.extend(
+            shlex.split(info_dict['certify_bootimg_extra_args']))
+
+
 def get_archive_name_and_format_for_shutil(path):
     """Returns archive name and format to shutil.make_archive() for the |path|.
 
@@ -189,6 +197,9 @@ def parse_cmdline():
                         help='signing algorithm for the certificate')
     parser.add_argument('--key', required=True,
                         help='path to the RSA private key')
+    parser.add_argument('--gki_info',
+                        help='path to a gki-info.txt to append additional'
+                             'properties into the boot signature')
     parser.add_argument('-o', '--output', required=True,
                         help='output file name')
 
@@ -198,10 +209,17 @@ def parse_cmdline():
 
     args = parser.parse_args()
 
+    if args.gki_info and args.boot_img_archive:
+        parser.error('--gki_info cannot be used with --boot_image_archive. '
+                     'The gki_info file should be included in the archive.')
+
     extra_args = []
     for a in args.extra_args:
         extra_args.extend(shlex.split(a))
     args.extra_args = extra_args
+
+    if args.gki_info:
+        load_gki_info_file(args.gki_info, args.extra_args)
 
     return args
 
@@ -230,10 +248,7 @@ def certify_bootimg_archive(boot_img_archive, output_archive,
 
         gki_info_file = os.path.join(unpack_dir, 'gki-info.txt')
         if os.path.exists(gki_info_file):
-            info_dict = load_dict_from_file(gki_info_file)
-            if 'certify_bootimg_extra_args' in info_dict:
-                extra_args.extend(
-                    shlex.split(info_dict['certify_bootimg_extra_args']))
+            load_gki_info_file(gki_info_file, extra_args)
 
         for boot_img in glob.glob(os.path.join(unpack_dir, 'boot-*.img')):
             print(f'Certifying {os.path.basename(boot_img)} ...')
