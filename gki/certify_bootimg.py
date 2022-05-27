@@ -273,7 +273,7 @@ def certify_bootimg_archive(boot_img_archive, output_archive,
         if os.path.exists(gki_info_file):
             load_gki_info_file(gki_info_file, extra_args, extra_footer_args)
 
-        for boot_img in glob.glob(os.path.join(unpack_dir, 'boot-*.img')):
+        for boot_img in glob.glob(os.path.join(unpack_dir, 'boot*.img')):
             print(f'Certifying {os.path.basename(boot_img)} ...')
             certify_bootimg(boot_img=boot_img, output_img=boot_img,
                             algorithm=algorithm, key=key, extra_args=extra_args,
