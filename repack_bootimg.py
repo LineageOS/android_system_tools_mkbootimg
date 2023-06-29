@@ -104,7 +104,7 @@ class RamdiskImage:
         # trying lz4 first.
         for compression_type, compression_util in [
             (RamdiskFormat.LZ4, 'lz4'),
-            (RamdiskFormat.GZIP, 'minigzip')]:
+            (RamdiskFormat.GZIP, 'gzip')]:
 
             # Command arguments:
             #   -d: decompression
@@ -141,7 +141,7 @@ class RamdiskImage:
         """
         compression_cmd = ['lz4', '-l', '-12', '--favor-decSpeed']
         if self._ramdisk_format == RamdiskFormat.GZIP:
-            compression_cmd = ['minigzip']
+            compression_cmd = ['gzip']
 
         print('Repacking ramdisk, which might take a few seconds ...')
 

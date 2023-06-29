@@ -79,7 +79,6 @@ python_binary_host {
     ],
     required: [
         "lz4",
-        "minigzip",
         "mkbootfs",
         "mkbootimg",
         "toybox",
