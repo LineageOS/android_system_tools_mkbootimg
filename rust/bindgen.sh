@@ -38,7 +38,7 @@ BLOCKED_TYPES_RE="__.+|.?int.+"
 # generated rust bindings really don't need.
 BLOCKED_ITEMS_RE="_.+|.?INT.+|PTR.+|ATOMIC.+|.+SOURCE|.+_H|SIG_.+|SIZE_.+|.?CHAR.+"
 CUSTOM_STRUCT_RE="(vendor_)?(boot_img_hdr|ramdisk_table_entry)_v\d+"
-CUSTOM_STRUCT_DERIVES="AsBytes,FromBytes,PartialEq,Copy,Clone,Debug"
+CUSTOM_STRUCT_DERIVES="AsBytes,FromBytes,FromZeroes,PartialEq,Copy,Clone,Debug"
 BINDGEN_FLAGS="--use-core --with-derive-default"
 BOOTIMG_PRIV=${BOOTIMG_DIR}/rust/bootimg_priv.rs
 
@@ -69,7 +69,7 @@ cat << EOF | cat - ${SCRATCH_DIR}/bootimg_gen.rs > ${BOOTIMG_PRIV}
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use zerocopy::{AsBytes, FromBytes};
+use zerocopy::{AsBytes, FromBytes, FromZeroes};
 
 EOF
 
