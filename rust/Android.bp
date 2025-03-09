@@ -4,26 +4,25 @@ package {
     default_applicable_licenses: ["Android-Apache-2.0"],
 }
 
-rust_defaults {
-    name: "libbootimg_private_defaults",
-    srcs: ["bootimg_priv.rs"],
+rust_bindgen {
+    name: "libbootimg_bindgen",
+    wrapper_src: "bindgen/bootimg.hpp",
+    crate_name: "bootimg_bindgen",
+    edition: "2021",
+    source_stem: "bindings",
+    bindgen_flags: [
+        "--ctypes-prefix=core::ffi",
+        "--use-core",
+        "--with-derive-default",
+        "--blocklist-type=__.+|.?int.+",
+        "--blocklist-item=_.+|.?INT.+|PTR.+|ATOMIC.+|.+SOURCE|.+_H|SIG_.+|SIZE_.+|.?CHAR.+",
+        "--with-derive-custom-struct=(vendor_)?(boot_img_hdr|ramdisk_table_entry)_v\\d+=AsBytes,FromBytes,FromZeroes,PartialEq,Copy,Clone,Debug",
+        "--raw-line=use zerocopy::{AsBytes, FromBytes, FromZeroes};",
+    ],
+    header_libs: ["bootimg_headers"],
     rustlibs: ["libzerocopy"],
-    lints: "none",
-}
-
-rust_library {
-    name: "libbootimg_private",
-    crate_name: "bootimg_private",
     vendor_available: true,
-    defaults: ["libbootimg_private_defaults"],
     host_supported: true,
-    visibility: [":__subpackages__"],
-}
-
-rust_test_host {
-    name: "libbootimg_tests_priv",
-    auto_gen_config: true,
-    defaults: ["libbootimg_private_defaults"],
 }
 
 rust_defaults {
@@ -31,7 +30,7 @@ rust_defaults {
     srcs: ["bootimg.rs"],
     rustlibs: [
         "libzerocopy",
-        "libbootimg_private",
+        "libbootimg_bindgen",
     ],
 }
 

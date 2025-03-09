@@ -15,7 +15,7 @@
 //! The public interface for bootimg structs
 use zerocopy::{ByteSlice, LayoutVerified};
 
-use bootimg_private::{
+use bootimg_bindgen::{
     boot_img_hdr_v0, boot_img_hdr_v1, boot_img_hdr_v2, boot_img_hdr_v3, boot_img_hdr_v4,
     vendor_boot_img_hdr_v3, vendor_boot_img_hdr_v4, BOOT_MAGIC, BOOT_MAGIC_SIZE, VENDOR_BOOT_MAGIC,
     VENDOR_BOOT_MAGIC_SIZE,
